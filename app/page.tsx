@@ -16,7 +16,7 @@ export default function Home() {
           <ShieldCheckIcon className="size-6 text-muted-foreground" />
           <CardTitle>Marketing Compliance Workbench</CardTitle>
           <CardDescription>
-            AI-assisted review of ClearPath Financial marketing materials. Under
+            AI-assisted compliance review for marketing materials. Under
             construction.
           </CardDescription>
         </CardHeader>

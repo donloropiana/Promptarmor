@@ -18,8 +18,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Marketing Compliance Workbench",
-  description:
-    "AI-assisted compliance review of consumer-finance marketing for ClearPath Financial.",
+  description: "AI-assisted compliance review for marketing materials.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
