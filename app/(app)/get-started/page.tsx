@@ -42,7 +42,7 @@ async function GetStartedContent() {
   const membership = await requireMember(profileId, "/get-started");
   const { supabase } = membership;
 
-  const [mine, members, invites, ads, decisions] = await Promise.all([
+  const [mine, members, invites, ads] = await Promise.all([
     getMyConnectedIntegrations(membership),
     supabase.from("profile_members").select("user_id", { count: "exact", head: true }).eq("profile_id", profileId),
     supabase
@@ -51,9 +51,21 @@ async function GetStartedContent() {
       .eq("profile_id", profileId)
       .is("accepted_at", null)
       .is("revoked_at", null),
-    supabase.from("assets").select("id", { count: "exact", head: true }).eq("profile_id", profileId),
-    supabase.from("decisions").select("id", { count: "exact", head: true }).eq("profile_id", profileId),
+    // "An ad" means what the Ads list shows: submitted, not withdrawn, not a sample.
+    supabase
+      .from("assets")
+      .select("id")
+      .eq("profile_id", profileId)
+      .not("submitted_at", "is", null)
+      .not("status", "in", "(withdrawn,preflighting)")
+      .or("audience.is.null,audience.not.in.(sample,sample_cleared)")
+      .limit(500),
   ]);
+  const liveAdIds = (ads.data ?? []).map((a) => a.id);
+  const decisions =
+    liveAdIds.length > 0
+      ? await supabase.from("decisions").select("id", { count: "exact", head: true }).eq("profile_id", profileId).in("asset_id", liveAdIds)
+      : { count: 0 };
 
   const steps: Step[] = [
     {
@@ -77,7 +89,7 @@ async function GetStartedContent() {
     {
       key: "first-ad",
       title: "Check your first ad",
-      done: (ads.count ?? 0) > 0,
+      done: liveAdIds.length > 0,
       body:
         "Drop a file or paste copy on the Ads page, or try one of the three samples. Within about a minute the ad is checked against the rules and your product facts: the problem words are quoted, the rule is named, a fix is suggested. Then look at Rules and Products once: switch off what does not apply, add the facts that do.",
       href: "/ads",
