@@ -19,6 +19,21 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next({ request });
   }
 
+  // Supabase's default email templates send the user to the Site URL with
+  // `?code=<pkce code>` (verify endpoint -> redirect_to). The app exchanges
+  // PKCE codes only in /auth/callback, so route any such arrival there and
+  // keep the original path as `next`. Custom templates (docs/setup.md) use
+  // /auth/confirm?token_hash=... and never hit this branch.
+  const url = request.nextUrl;
+  const code = url.searchParams.get("code");
+  if (code && url.pathname !== "/auth/callback" && !url.pathname.startsWith("/api/")) {
+    const target = new URL("/auth/callback", url.origin);
+    target.searchParams.set("code", code);
+    const next = url.pathname === "/" ? "/ads" : url.pathname;
+    target.searchParams.set("next", next);
+    return NextResponse.redirect(target);
+  }
+
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(env.url, env.publishableKey, {
