@@ -66,6 +66,27 @@ export const TEXT_TERM_LABELS: Record<(typeof TEXT_TERM_KEYS)[number], string> =
 
 const KNOWN = new Set<string>([...TERM_FIELDS.map((f) => f.key), ...TEXT_TERM_KEYS]);
 
+/** True for a key the editor renders as a built-in field; anything else is a fact the workspace defined. */
+export function isKnownTermKey(key: string): boolean {
+  return KNOWN.has(key);
+}
+
+/** "Uptime SLA" -> "uptime_sla": the JSON key for a fact a person names. */
+export function factKey(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 40);
+}
+
+/** "uptime_sla" -> "Uptime sla" for display. */
+export function factLabel(key: string): string {
+  const words = key.replace(/_/g, " ").trim();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
 function isEmpty(v: unknown): boolean {
   return v === null || v === undefined || v === "";
 }

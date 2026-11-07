@@ -1,11 +1,14 @@
 "use client";
 
+import { useState } from "react";
+
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
-import { TEXT_TERM_LABELS, type TermField } from "./term-fields";
+import { factKey, factLabel, isKnownTermKey, TEXT_TERM_LABELS, type TermField } from "./term-fields";
 
 /**
  * Editable term sheet: a summary people read, the known fields, a
@@ -29,6 +32,21 @@ export function ProductTermFields({
 }) {
   const booleans = fields.filter((f) => f.kind === "boolean");
   const scalars = fields.filter((f) => f.kind !== "boolean");
+  // Facts this workspace defined itself: any key the built-in fields do not own.
+  const custom = Object.keys(values).filter((k) => !isKnownTermKey(k) && values[k] !== "");
+  const [newName, setNewName] = useState("");
+  const [newValue, setNewValue] = useState("");
+  const [factError, setFactError] = useState<string | null>(null);
+  function addFact() {
+    const key = factKey(newName);
+    if (!key) return setFactError("Name the fact first.");
+    if (isKnownTermKey(key) || values[key]) return setFactError("A fact with that name already exists.");
+    if (!newValue.trim()) return setFactError("Give it a value.");
+    onChange(key, newValue.trim());
+    setNewName("");
+    setNewValue("");
+    setFactError(null);
+  }
   return (
     <>
       <Field>
@@ -81,6 +99,62 @@ export function ProductTermFields({
           ))}
         </div>
       ) : null}
+      <div className="rounded-lg border p-3">
+        <div className="text-sm font-medium">Your own facts</div>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          Anything true about this product that an ad could get wrong: a price, a guarantee, an eligibility rule, a limit. Name it, give it a value.
+          The check compares every claim in an ad against these.
+        </p>
+        {custom.length > 0 ? (
+          <ul className="mt-3 grid gap-2">
+            {custom.map((k) => (
+              <li key={k} className="grid grid-cols-[1fr_1fr_auto] items-center gap-2">
+                <span className="truncate text-sm" title={k}>
+                  {factLabel(k)}
+                </span>
+                <Input
+                  id={`${idPrefix}-fact-${k}`}
+                  aria-label={`${factLabel(k)} value`}
+                  value={values[k] ?? ""}
+                  onChange={(e) => onChange(k, e.target.value)}
+                  maxLength={300}
+                />
+                <Button type="button" variant="ghost" size="sm" onClick={() => onChange(k, "")} aria-label={`Remove ${factLabel(k)}`}>
+                  Remove
+                </Button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        <div className="mt-3 grid grid-cols-[1fr_1fr_auto] items-center gap-2">
+          <Input
+            id={`${idPrefix}-fact-name`}
+            aria-label="New fact name"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            maxLength={60}
+            placeholder="Name, e.g. Uptime SLA"
+          />
+          <Input
+            id={`${idPrefix}-fact-value`}
+            aria-label="New fact value"
+            value={newValue}
+            onChange={(e) => setNewValue(e.target.value)}
+            maxLength={300}
+            placeholder="Value, e.g. 99.9%"
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                addFact();
+              }
+            }}
+          />
+          <Button type="button" variant="outline" size="sm" onClick={addFact}>
+            Add fact
+          </Button>
+        </div>
+        {factError ? <p className="mt-1 text-xs text-destructive">{factError}</p> : null}
+      </div>
       <Field>
         <FieldLabel htmlFor={`${idPrefix}-representative_example`}>
           {TEXT_TERM_LABELS.representative_example} <span className="font-normal text-muted-foreground">(optional)</span>
