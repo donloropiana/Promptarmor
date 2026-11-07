@@ -7,7 +7,7 @@
  * nothing may be found (legitimate markup that must not raise an alert).
  * Exits 1 on any failure. No database, no model, no env.
  */
-import { detectHiddenText, foldForMatching, looksLikeInstruction } from "@/lib/ai/hidden-text";
+import { detectHiddenText, foldForMatching, looksLikeInstruction } from "@/features/analysis/hidden-text";
 
 type Expect = { kind: "hidden_text" | "possible_injection"; has: string; location?: RegExp };
 type Case = { name: string; html?: string; text?: string; expect: Expect[] | "none" };

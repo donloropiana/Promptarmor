@@ -1,6 +1,6 @@
 # Nango (Google and Microsoft connections)
 
-Users connect their own Google or Microsoft account. The app only reads mail and files. It never sends, modifies or deletes anything, even though the Nango-managed OAuth apps grant broader scopes. `nangoProxy` in `lib/nango/server.ts` enforces this: it allows GET, plus POST only for a Microsoft Graph `$batch` whose sub-requests are all GET.
+Users connect their own Google or Microsoft account. The app only reads mail and files. It never sends, modifies or deletes anything, even though the Nango-managed OAuth apps grant broader scopes. `nangoProxy` in `src/lib/nango/server.ts` enforces this: it allows GET, plus POST only for a Microsoft Graph `$batch` whose sub-requests are all GET.
 
 ## Integrations
 
@@ -15,11 +15,11 @@ These are the integration unique keys in the Nango dashboard (Nango cloud, `dev`
 | `one-drive` | OneDrive for Business | microsoft | files | step 2 (user picks) |
 | `one-drive-personal` | OneDrive Personal | microsoft | files | step 2 (user picks) |
 
-`lib/nango/integrations.ts` holds this registry. The key is also `connections.provider` and `connections.provider_config_key`.
+`src/lib/nango/integrations.ts` holds this registry. The key is also `connections.provider` and `connections.provider_config_key`.
 
 ## Connect flow
 
-1. The user clicks **Connect Google** or **Connect Microsoft** (`components/connections/connect-buttons.tsx`).
+1. The user clicks **Connect Google** or **Connect Microsoft** (`src/features/connections/components/connect-buttons.tsx`).
 2. For each step, the browser calls `POST /api/connections/session` with `{ group, profileId, step }`. The server checks membership, then calls `nango.createConnectSession` with:
    - `tags`: `end_user_id` (user id), `end_user_email`, `end_user_display_name`, `organization_id` (profile id)
    - `allowed_integrations`: the step's integration(s)
@@ -29,7 +29,7 @@ These are the integration unique keys in the Nango dashboard (Nango cloud, `dev`
 
 If the user closes Connect UI partway through, the steps that already succeeded stay connected. Clicking the button again skips them, as long as the page passes `connectedIntegrations`.
 
-One sync pass is time-boxed (about 45 s on Vercel Hobby). When it runs out of time it leaves the connection `connected` with `stats.has_more = true` and returns `hasMore`. While the page stays open, the Connect buttons keep calling `POST /api/connections/:id/sync` until `hasMore` is false (`components/connections/sync-drain.ts`, up to 10 passes, waiting when a pass is already running). The daily maintenance cron also runs one pass for the connection that has waited longest.
+One sync pass is time-boxed (about 45 s on Vercel Hobby). When it runs out of time it leaves the connection `connected` with `stats.has_more = true` and returns `hasMore`. While the page stays open, the Connect buttons keep calling `POST /api/connections/:id/sync` until `hasMore` is false (`src/features/connections/components/sync-drain.ts`, up to 10 passes, waiting when a pass is already running). The daily maintenance cron also runs one pass for the connection that has waited longest.
 
 ## Reconnect
 

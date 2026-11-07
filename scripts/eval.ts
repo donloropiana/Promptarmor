@@ -26,14 +26,14 @@
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 
-import { analyzeContent, type AnalyzeContentResult } from "@/lib/ai/analyze";
+import { analyzeContent, type AnalyzeContentResult } from "@/features/analysis/server/analyze";
 import { isAiGatewayConfigured, MODELS } from "@/lib/ai/budget";
 import { getAiMode } from "@/lib/ai/mode";
-import { loadRecordings, recordedFindings, type RecordedCheck } from "@/lib/ai/recorded";
-import type { OfferInput, RuleInput } from "@/lib/ai/schema";
-import { STARTER_PRODUCTS } from "@/lib/seed/starter-products";
-import { STARTER_RULES } from "@/lib/seed/starter-rules";
-import type { Product } from "@/lib/types/ads";
+import { loadRecordings, recordedFindings, type RecordedCheck } from "@/features/analysis/server/recorded";
+import type { OfferInput, RuleInput } from "@/features/analysis/schema";
+import { STARTER_PRODUCTS } from "@/features/products/starter-products";
+import { STARTER_RULES } from "@/features/rules/starter-rules";
+import type { Product } from "@/features/ads/types";
 
 type Fixture = {
   key: string;

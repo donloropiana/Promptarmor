@@ -22,7 +22,7 @@
 
 import { createClient } from "@supabase/supabase-js";
 
-import type { Database } from "../lib/supabase/database.types";
+import type { Database } from "@/lib/supabase/database.types";
 
 type AssetRow = {
   id: string;

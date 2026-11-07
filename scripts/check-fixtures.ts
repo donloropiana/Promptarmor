@@ -19,9 +19,9 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { FIXTURE_ADS, SAMPLE_ADS, SAMPLE_KEYS } from "@/lib/seed/samples";
-import { STARTER_PRODUCTS } from "@/lib/seed/starter-products";
-import { REFERENCE_LIBRARY, STARTER_RULES } from "@/lib/seed/starter-rules";
+import { FIXTURE_ADS, SAMPLE_ADS, SAMPLE_KEYS } from "@/features/ads/samples";
+import { STARTER_PRODUCTS } from "@/features/products/starter-products";
+import { REFERENCE_LIBRARY, STARTER_RULES } from "@/features/rules/starter-rules";
 
 const problems: string[] = [];
 const warn = (msg: string) => problems.push(msg);

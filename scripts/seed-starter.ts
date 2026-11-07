@@ -11,9 +11,9 @@
  * also pass --trust).
  *
  * Idempotent: re-running inserts nothing that already exists and only adds a
- * starter rule version when the text in lib/seed/starter-rules.ts changed.
+ * starter rule version when the text in src/features/rules/starter-rules.ts changed.
  */
-import { ensureWorkspaceDefaults, seedStarterLibrary, STARTER_PRODUCTS, STARTER_RULES } from "@/lib/seed";
+import { ensureWorkspaceDefaults, seedStarterLibrary, STARTER_PRODUCTS, STARTER_RULES } from "@/features/workspaces/server/seed";
 import { requireSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/lib/supabase/types";
 

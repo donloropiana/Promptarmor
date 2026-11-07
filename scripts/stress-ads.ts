@@ -41,11 +41,11 @@ import { deflateSync } from "node:zlib";
 
 import { createClient } from "@supabase/supabase-js";
 
-import { startAnalysisForVersion } from "@/lib/ai/engine";
-import { createAd } from "@/lib/intake/ads";
+import { startAnalysisForVersion } from "@/features/analysis/server/engine";
+import { createAd } from "@/features/ads/server/intake";
 import { requireSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/types";
-import type { AdFile, Product } from "@/lib/types/ads";
+import type { AdFile, Product } from "@/features/ads/types";
 
 export const PROFILE_ID = process.env.STRESS_PROFILE ?? process.env.VERIFY_PROFILE ?? "cf7d66e9-54d5-4b99-ac6f-89d760a20731";
 export const USER_ID = process.env.STRESS_USER ?? process.env.VERIFY_USER ?? "88b5b90e-3f4b-46a2-8c50-333240cbb671";

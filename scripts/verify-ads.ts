@@ -33,9 +33,9 @@
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 
-import { startAnalysisForVersion } from "@/lib/ai/engine";
-import { createAd } from "@/lib/intake/ads";
-import { getSampleAd } from "@/lib/seed/samples";
+import { startAnalysisForVersion } from "@/features/analysis/server/engine";
+import { createAd } from "@/features/ads/server/intake";
+import { getSampleAd } from "@/features/ads/samples";
 import { requireSupabaseAdminClient } from "@/lib/supabase/admin";
 
 import { BULK_COUNT, LONG_SUBMITTER_EMAIL, LONG_SUBMITTER_NAME, approveWithLongException, ensureStressAds, makePdf, retireStressAds, type StressAd } from "./stress-ads";

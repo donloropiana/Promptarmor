@@ -1,5 +1,5 @@
 /**
- * Writes fixtures/<key>.json, one file per ad in lib/seed/samples.ts
+ * Writes fixtures/<key>.json, one file per ad in src/features/ads/samples.ts
  * (FIXTURE_ADS). The three empty-state chips (SAMPLE_ADS) are the same
  * objects, so the demo and the eval always agree.
  *
@@ -11,7 +11,7 @@ import { mkdir, readdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { FIXTURE_ADS, SAMPLE_KEYS } from "@/lib/seed/samples";
+import { FIXTURE_ADS, SAMPLE_KEYS } from "@/features/ads/samples";
 
 const FIXTURES_DIR = fileURLToPath(new URL("../fixtures", import.meta.url));
 

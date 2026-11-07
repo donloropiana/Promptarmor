@@ -22,9 +22,9 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-import { runAnalysis } from "@/lib/ai/engine";
-import { createAd, createSampleAd, simulateRevision } from "@/lib/intake/ads";
-import { ensureWorkspaceDefaults, seedStarterLibrary } from "@/lib/seed";
+import { runAnalysis } from "@/features/analysis/server/engine";
+import { createAd, createSampleAd, simulateRevision } from "@/features/ads/server/intake";
+import { ensureWorkspaceDefaults, seedStarterLibrary } from "@/features/workspaces/server/seed";
 import { requireSupabaseAdminClient } from "@/lib/supabase/admin";
 
 const DEFAULT_TEXT = `Subject: Consolidate your debt with a ClearPath personal loan

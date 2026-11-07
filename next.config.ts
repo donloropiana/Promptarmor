@@ -3,7 +3,7 @@ import type { NextConfig } from "next";
 /**
  * Response headers for every route. The creative preview renders untrusted
  * HTML only inside a sandboxed srcdoc iframe with its own CSP
- * (components/ads/creative-view.tsx); these headers protect the app pages
+ * (src/features/ads/components/detail/creative-view.tsx); these headers protect the app pages
  * themselves: no framing by other sites (clickjacking), no MIME sniffing of
  * responses, a referrer that never leaks ad ids to the sites an ad links to,
  * and no plugins or <base> hijacking. Vercel adds Strict-Transport-Security.
@@ -20,7 +20,7 @@ const nextConfig: NextConfig = {
   /* config options here */
   experimental: {
     agentFeedback: true,
-    // Uploads go through a Server Action (lib/actions/ads.ts uploadAd); the
+    // Uploads go through a Server Action (src/features/ads/server/actions.ts uploadAd); the
     // default 1 MB body limit would refuse a 2 MB PDF before our own 4 MB
     // check ran. Vercel caps request bodies at 4.5 MB.
     serverActions: {
@@ -43,7 +43,7 @@ const nextConfig: NextConfig = {
   // names Doppler/Vercel provide. Public values ONLY: never map
   // SUPABASE_SECRET_KEY or NANGO_SECRET_KEY here (everything in `env` is
   // inlined into client JavaScript). Empty string when unset so builds work
-  // without env; lib/supabase/env.ts treats "" as "not configured".
+  // without env; src/lib/supabase/env.ts treats "" as "not configured".
   env: {
     // `||`, not `??`: an empty NEXT_PUBLIC_* value must fall back too.
     NEXT_PUBLIC_SUPABASE_URL:

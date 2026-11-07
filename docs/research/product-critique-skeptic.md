@@ -7,7 +7,7 @@
 All six lenses agree on the product. The disagreements are over details. Build one ranked **Ads** list, one **ad page** where V2 is reviewed in place, **Rules | Products**, and **Settings**. Use **4 statuses** and **3 decisions**, and record an exception **once**, in the Approve sheet. The AI reads one ad at a time, has no tools, and has no write path. Every proposal that adds a new surface or a learning system gets dropped, because none of them fit in 14 hours.
 
 What I checked myself:
-- `lib/nango/server.ts:163` says the managed apps grant "broad scopes (send/modify)".
+- `src/lib/nango/server.ts:163` says the managed apps grant "broad scopes (send/modify)".
 - `CONNECT_STEPS` asks for 2 consents per provider.
 - `ai` is not in `package.json`.
 - `skills-lock.json` shows `supabase-server` was installed with `bunx`.

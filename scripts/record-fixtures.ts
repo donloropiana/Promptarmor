@@ -14,7 +14,7 @@
  * the script explains and exits 1 without touching fixtures/recorded.
  *
  * Each file stores the key, the normalized text hash intake would store on
- * the version (lib/intake/hash.ts over the same extraction intake uses), the
+ * the version (src/features/analysis/hash.ts over the same extraction intake uses), the
  * content sha256, the model, prompt hash, token usage (incl. cache) and the
  * merged findings + hidden-text candidates from analyzeContent.
  */
@@ -22,17 +22,17 @@
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { analyzeContent, type AnalyzeContentResult } from "@/lib/ai/analyze";
+import { analyzeContent, type AnalyzeContentResult } from "@/features/analysis/server/analyze";
 import { isAiGatewayConfigured, MODELS } from "@/lib/ai/budget";
 import { getAiMode } from "@/lib/ai/mode";
-import { PROMPT_VERSION, promptHash } from "@/lib/ai/prompts";
-import { loadRecordings, RECORDED_DIR, type RecordedCheck } from "@/lib/ai/recorded";
-import type { OfferInput, RuleInput } from "@/lib/ai/schema";
-import { extractFromHtml, extractFromText } from "@/lib/intake/extract";
-import { normalizedTextHash, sha256Hex } from "@/lib/intake/hash";
-import { STARTER_PRODUCTS } from "@/lib/seed/starter-products";
-import { STARTER_RULES } from "@/lib/seed/starter-rules";
-import type { Product } from "@/lib/types/ads";
+import { PROMPT_VERSION, promptHash } from "@/features/analysis/prompts";
+import { loadRecordings, RECORDED_DIR, type RecordedCheck } from "@/features/analysis/server/recorded";
+import type { OfferInput, RuleInput } from "@/features/analysis/schema";
+import { extractFromHtml, extractFromText } from "@/features/analysis/extract";
+import { normalizedTextHash, sha256Hex } from "@/features/analysis/hash";
+import { STARTER_PRODUCTS } from "@/features/products/starter-products";
+import { STARTER_RULES } from "@/features/rules/starter-rules";
+import type { Product } from "@/features/ads/types";
 
 type Fixture = {
   key: string;
@@ -67,7 +67,7 @@ const onlyKeys = only ? new Set(only.split(",").map((s) => s.trim()).filter(Bool
 
 const FIXTURES_DIR = path.resolve(process.cwd(), "fixtures");
 
-/** The same hashes intake stores on a version built from this text or HTML (lib/intake/ads.ts buildFromInput). */
+/** The same hashes intake stores on a version built from this text or HTML (src/features/ads/server/intake.ts buildFromInput). */
 export function hashesForContent(input: { text?: string; html?: string }): { normalized_text_hash: string; content_sha256: string; extracted: string } {
   if (input.html && input.html.trim()) {
     const doc = extractFromHtml(input.html);

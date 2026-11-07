@@ -1,6 +1,6 @@
 # Starter rules: what each one checks and why
 
-The starter library (`lib/seed/starter-rules.ts`) is 16 rules every new workspace gets. Each workspace owns a copy (edit with a reason, turn off, version history), so the library is a starting point, not a mandate. This page explains, per rule, what it checks, its legal basis, and why it carries the default severity it does. The product terms the offer rule compares against are at the end.
+The starter library (`src/features/rules/starter-rules.ts`) is 16 rules every new workspace gets. Each workspace owns a copy (edit with a reason, turn off, version history), so the library is a starting point, not a mandate. This page explains, per rule, what it checks, its legal basis, and why it carries the default severity it does. The product terms the offer rule compares against are at the end.
 
 Severity scale used throughout:
 
@@ -114,7 +114,7 @@ OWASP LLM01 (prompt injection via untrusted documents) and FTC Act §5 (text a c
 
 ## ClearPath Financial product terms (starter products)
 
-These seed a workspace that has no offers yet (`lib/seed/starter-products.ts`). After that, the Products tab is the source of truth: editing terms creates a new offer version with a reason, and every approved ad whose check used the old version returns to Needs review tagged "Rates changed". The numeric keys are what the deterministic offer checks read; `summary` is the sentence a reviewer sees.
+These seed a workspace that has no offers yet (`src/features/products/starter-products.ts`). After that, the Products tab is the source of truth: editing terms creates a new offer version with a reason, and every approved ad whose check used the old version returns to Needs review tagged "Rates changed". The numeric keys are what the deterministic offer checks read; `summary` is the sentence a reviewer sees.
 
 | Code | Product | Key terms | Fees | Other |
 |---|---|---|---|---|

@@ -21,9 +21,9 @@ import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { deflateSync } from "node:zlib";
 
-import { startAnalysisForVersion } from "@/lib/ai/engine";
-import { addVersion, createAd } from "@/lib/intake/ads";
-import { getSampleAd } from "@/lib/seed/samples";
+import { startAnalysisForVersion } from "@/features/analysis/server/engine";
+import { addVersion, createAd } from "@/features/ads/server/intake";
+import { getSampleAd } from "@/features/ads/samples";
 import { requireSupabaseAdminClient } from "@/lib/supabase/admin";
 
 const BASE = (process.env.VERIFY_BASE_URL ?? "http://localhost:3102").replace(/\/$/, "");
