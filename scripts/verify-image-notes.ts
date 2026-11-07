@@ -302,7 +302,7 @@ async function pinNote(page: Page, label: string, why: string, severity: "Critic
 async function pinFlow(page: Page, ad: TestAd) {
   await openAd(page, ad);
   record("image ad: Preview shows the image", await visible(page.locator(IMG)));
-  record("image ad: hint says to click a spot to pin a note", /Click a spot on the image to pin a note/.test(await bodyText(page)));
+  record("image ad: hint says to click a spot to pin a note", /Click or tap a spot on the image to pin a note/.test(await bodyText(page)));
   record("image ad: no pins yet", (await page.locator(PINS).count()) === 0);
 
   // Pin 1: Major, in the footer band.

@@ -345,7 +345,24 @@ function PinnedImage({
       </div>
       {(onPlace || pins.length > 0) && (
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t px-3 py-1.5 text-xs text-muted-foreground">
-          <span>{onPlace ? "Click a spot on the image to pin a note." : "Pins are the reviewer's notes on the image."}</span>
+          <span>
+            {onPlace ? (
+              <>
+                Click or tap a spot on the image to pin a note, or{" "}
+                <button
+                  type="button"
+                  className="rounded-sm underline underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:outline-none"
+                  onClick={() => onPlace({ x: 0.5, y: 0.5 })}
+                  aria-label="Pin a note at the centre of the image"
+                >
+                  pin one at the centre
+                </button>
+                .
+              </>
+            ) : (
+              "Pins are the reviewer's notes on the image."
+            )}
+          </span>
           {pins.length > 0 && (
             <span className="tabular-nums">
               {pins.length} note{pins.length === 1 ? "" : "s"}

@@ -622,7 +622,7 @@ async function hiddenTextFlow(page: Page, ad: TestAd) {
   const approve = page.getByRole("button", { name: /^Approve V1/ });
   record("hidden: Approve disabled until acknowledged", await approve.isDisabled());
   await shot(page, "hidden-alert");
-  await page.getByRole("button", { name: /Acknowledge/ }).first().click();
+  await page.getByRole("button", { name: /^Acknowledge/ }).click();
   const ack = await waitForText(page, /Acknowledged\. Decisions are unblocked/, 20_000);
   record("hidden: acknowledged state", ack);
   record("hidden: Approve enabled after acknowledging", await approve.isEnabled());

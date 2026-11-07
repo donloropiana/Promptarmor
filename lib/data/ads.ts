@@ -339,7 +339,7 @@ export async function listAdsWith(db: Db, profileId: string, userId: string): Pr
     latestVersionIds.length
       ? db
           .from("findings")
-          .select("id, asset_version_id, severity, quote, explanation, origin, created_at, analysis_runs(status)")
+          .select("id, asset_version_id, severity, quote, explanation, origin, created_at, anchor, analysis_runs(status)")
           .in("asset_version_id", latestVersionIds)
       : Promise.resolve({ data: [] as never[] }),
     assetIds.length
@@ -384,6 +384,7 @@ export async function listAdsWith(db: Db, profileId: string, userId: string): Pr
     explanation: string | null;
     origin: string;
     created_at: string;
+    anchor: Json | null;
     analysis_runs: { status: string } | { status: string }[] | null;
   };
   // Issues a reviewer should see on a version: reviewer findings plus the AI
@@ -569,7 +570,14 @@ export async function listAdsWith(db: Db, profileId: string, userId: string): Pr
       openMajor,
       openMinor,
       hiddenText,
-      topIssue: top ? { quote: top.quote, explanation: top.explanation } : q.top_issue ? { quote: null, explanation: q.top_issue } : null,
+      // A note pinned on the image has a label, not quoted ad copy, so it is not shown in quotation marks.
+      topIssue: top
+        ? imageRegionOf(top.anchor)
+          ? { quote: null, explanation: `Pinned on the image: ${top.quote ?? "note"}${top.explanation ? ` — ${top.explanation}` : ""}` }
+          : { quote: top.quote, explanation: top.explanation }
+        : q.top_issue
+          ? { quote: null, explanation: q.top_issue }
+          : null,
       noText: (content.format === "pdf" || content.format === "image") && noTextVersionIds.has(q.latest_version_id!) && !transcribedVersionIds.has(q.latest_version_id!),
       from,
       thumbnail,

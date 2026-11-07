@@ -80,7 +80,13 @@ export function AdPage({ detail, userId }: { detail: AdDetail; userId: string })
 
   const blocked = blockingReason(detail);
   // "Edit" (copy or file) follows the other actions: never on an approved ad, and not while a check is running.
-  const editDisabledReason = approved ? "This ad is approved. Withdraw the approval before changing it." : detail.checking ? "Wait for the check to finish, then edit." : null;
+  const editDisabledReason = archived
+    ? "This ad is archived. Unarchive it before changing it."
+    : approved
+      ? "This ad is approved. Withdraw the approval before changing it."
+      : detail.checking
+        ? "Wait for the check to finish, then edit."
+        : null;
   const openEdit = useCallback(
     (tab?: EditTab) => {
       if (editDisabledReason) return;

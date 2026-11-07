@@ -117,11 +117,14 @@ async function loadAsset(assetId: string) {
   const db = await createClient();
   const { data } = await db
     .from("assets")
-    .select("id, profile_id, latest_version_id, status, product, channel, audience")
+    .select("id, profile_id, latest_version_id, status, product, channel, audience, archived_at")
     .eq("id", assetId)
     .maybeSingle();
   return data;
 }
+
+/** Archived ads are frozen on the server too, not only in the UI. */
+const ARCHIVED: ActionResult<never> = { ok: false, error: "This ad is archived. Unarchive it first.", code: "PT409" };
 
 function kickAnalysis(versionId: string) {
   after(async () => {
@@ -365,8 +368,9 @@ export async function addReviewerIssue(input: AddIssueInput): Promise<ActionResu
   const db = await createClient();
   const { data: version } = await db.from("asset_versions").select("id, profile_id, asset_id, extracted_text, content").eq("id", assetVersionId).maybeSingle();
   if (!version) return { ok: false, error: "That ad no longer exists.", code: "PT404" };
-  const { data: asset } = await db.from("assets").select("id, latest_version_id, status").eq("id", version.asset_id).maybeSingle();
+  const { data: asset } = await db.from("assets").select("id, latest_version_id, status, archived_at").eq("id", version.asset_id).maybeSingle();
   if (!asset) return { ok: false, error: "That ad no longer exists.", code: "PT404" };
+  if (asset.archived_at) return ARCHIVED;
   if (asset.latest_version_id !== version.id) return { ok: false, error: "Only the latest version can take new issues.", code: "PT409" };
   if (asset.status === "approved" || asset.status === "approved_with_exceptions") {
     return { ok: false, error: "This version is approved. Withdraw the approval before adding issues.", code: "PT409" };
@@ -516,6 +520,8 @@ export async function decide(input: DecideInput): Promise<ActionResult<DecideRes
   const db = await createClient();
   const { data: version } = await db.from("asset_versions").select("id, asset_id, profile_id").eq("id", versionId).maybeSingle();
   if (!version) return NOT_FOUND;
+  const { data: owner } = await db.from("assets").select("archived_at").eq("id", version.asset_id).maybeSingle();
+  if (owner?.archived_at) return ARCHIVED;
 
   // Approving with open Critical/Major issues: the database wants each one
   // dispositioned as accepted_exception BEFORE the decision, plus one
@@ -603,6 +609,7 @@ export async function applySuggestion(input: { assetId: string; findingId: strin
   if (!user) return SIGNED_OUT;
   const asset = await loadAsset(parsed.data.assetId);
   if (!asset?.latest_version_id) return NOT_FOUND;
+  if (asset.archived_at) return ARCHIVED;
 
   const db = await createClient();
   const [{ data: finding }, { data: version }] = await Promise.all([
@@ -669,18 +676,28 @@ export async function addReviewerVersion(formData: FormData): Promise<ActionResu
         .trim()
         .min(1, { error: "Say what changed, in one line." })
         .max(MAX_VERSION_NOTE_CHARS, { error: `Keep the note under ${MAX_VERSION_NOTE_CHARS} characters.` }),
+      // The version the sheet was opened on; a newer one means the edit is stale.
+      baseVersionId: uuid.optional(),
     })
-    .safeParse({ assetId: String(formData.get("assetId") ?? ""), note: String(formData.get("note") ?? "").replace(/\s*\n+\s*/g, " ") });
+    .safeParse({
+      assetId: String(formData.get("assetId") ?? ""),
+      note: String(formData.get("note") ?? "").replace(/\s*\n+\s*/g, " "),
+      baseVersionId: formData.get("baseVersionId") ? String(formData.get("baseVersionId")) : undefined,
+    });
   if (!parsed.success) return invalid(parsed.error);
-  const { assetId, note } = parsed.data;
+  const { assetId, note, baseVersionId } = parsed.data;
 
   const user = await getCurrentUser();
   if (!user) return SIGNED_OUT;
   // Read under RLS: finding the asset proves membership of its workspace.
   const asset = await loadAsset(assetId);
   if (!asset?.latest_version_id) return NOT_FOUND;
+  if (asset.archived_at) return ARCHIVED;
   if (asset.status === "approved" || asset.status === "approved_with_exceptions") {
     return { ok: false, error: "This ad is approved. Withdraw the approval before changing it.", code: "PT409" };
+  }
+  if (baseVersionId && baseVersionId !== asset.latest_version_id) {
+    return { ok: false, error: "A newer version arrived while you were editing. Reload to review it, then edit that one.", code: "PT409" };
   }
   const db = await createClient();
   const { data: run } = await db
@@ -722,7 +739,7 @@ export async function addReviewerVersion(formData: FormData): Promise<ActionResu
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : "";
-    if (/unchanged|identical|PT409/i.test(message)) {
+    if ((err instanceof IntakeError && err.code === "unchanged") || /unchanged|identical|PT409/i.test(message)) {
       return { ok: false, error: file ? "That file is the same as the current version, so nothing changed." : "That text is the same as the current version, so nothing changed.", code: "PT409" };
     }
     if (err instanceof IntakeError && PLAIN_INTAKE_CODES.has(err.code)) return { ok: false, error: err.message, code: err.code };
@@ -790,6 +807,7 @@ export async function simulateRevision(assetId: string): Promise<ActionResult<{ 
   if (!user) return SIGNED_OUT;
   const asset = await loadAsset(parsed.data);
   if (!asset) return NOT_FOUND;
+  if (asset.archived_at) return ARCHIVED;
   try {
     const result = await simulateRevisionIntake({ assetId: asset.id, userId: user.id });
     kickAnalysis(result.versionId);

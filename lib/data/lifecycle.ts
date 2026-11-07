@@ -14,9 +14,10 @@ import type { Json } from "@/lib/supabase/types";
  * then shows the "Expired" tag instead of "Rates changed"). Its live fields
  * stay for the record. One events row (asset.expired, system actor) per ad.
  *
- * An ad that was re-approved after expiring keeps its old end date, so a
- * sweep skips ads whose reason already names that same end date; marking it
- * live again (new dates) makes it eligible again.
+ * An ad that was re-approved after expiring keeps its old end date, so the
+ * sweep only expires an ad whose end date passed AFTER its current approval
+ * was granted (approval before end date). A re-approval after the end date
+ * is left alone until it is marked live again with new dates.
  */
 export type ExpirySweep = { checked: number; expired: number; ids: string[]; skipped?: string };
 
@@ -28,6 +29,7 @@ type Candidate = {
   live_channel: string | null;
   expires_at: string | null;
   re_review_reason: Json | null;
+  approved_decision_id: string | null;
 };
 
 export async function expireLapsedAds(opts: { profileId?: string; limit?: number } = {}): Promise<ExpirySweep> {
@@ -37,7 +39,7 @@ export async function expireLapsedAds(opts: { profileId?: string; limit?: number
 
   let query = admin
     .from("assets")
-    .select("id, profile_id, title, status, live_channel, expires_at, re_review_reason")
+    .select("id, profile_id, title, status, live_channel, expires_at, re_review_reason, approved_decision_id")
     .in("status", [...APPROVED_STATUSES])
     .is("archived_at", null)
     .not("expires_at", "is", null)
@@ -52,7 +54,20 @@ export async function expireLapsedAds(opts: { profileId?: string; limit?: number
     return { checked: 0, expired: 0, ids: [], skipped: error.code === "42703" ? "lifecycle columns missing" : `error ${error.code}` };
   }
 
-  const candidates = ((data ?? []) as Candidate[]).filter((a) => {
+  // When was the current approval granted? Only an end date that passed
+  // after that approval counts; a re-approval made after the end date does not.
+  const rows = (data ?? []) as Candidate[];
+  const decisionIds = rows.map((a) => a.approved_decision_id).filter((v): v is string => Boolean(v));
+  const approvedAt = new Map<string, string>();
+  if (decisionIds.length > 0) {
+    const { data: decisions } = await admin.from("decisions").select("id, created_at").in("id", decisionIds);
+    for (const d of decisions ?? []) approvedAt.set(d.id, d.created_at);
+  }
+  const candidates = rows.filter((a) => {
+    if (!a.expires_at) return false;
+    const grantedAt = a.approved_decision_id ? approvedAt.get(a.approved_decision_id) : undefined;
+    if (grantedAt) return new Date(grantedAt).getTime() < new Date(a.expires_at).getTime();
+    // No decision row to compare against: fall back to "not already expired for this same end date".
     const reason = a.re_review_reason && typeof a.re_review_reason === "object" && !Array.isArray(a.re_review_reason) ? (a.re_review_reason as Record<string, unknown>) : null;
     return !(reason?.kind === "expired" && reason.expires_at === a.expires_at);
   });

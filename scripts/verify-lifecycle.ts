@@ -231,7 +231,7 @@ async function markLiveFlow(page: Page, ad: TestAd) {
   const liveText = await bodyText(page);
   record("ship it: card reads Live on Meta since … · ends …", liveShown && /ends /.test(liveText), liveText.match(/Live on Meta since[^\n]*/)?.[0]);
   record("ship it: link shown by its host", /facebook\.com/.test(liveText));
-  record("ad: header status word is Live", (await page.locator("header").innerText()).includes("Live"));
+  record("ad: header status word is Live", (await page.locator("[data-slot=sidebar-inset] header").nth(1).innerText()).includes("Live"));
   await shot(page, "lifecycle-live");
   const { data: row } = await admin.from("assets").select("live_at, live_channel, live_url, expires_at, status").eq("id", ad.assetId).single();
   record("db: live fields saved, status unchanged", row?.live_channel === "meta" && Boolean(row?.live_at) && Boolean(row?.expires_at) && (row?.status === "approved" || row?.status === "approved_with_exceptions"), JSON.stringify(row));
@@ -265,7 +265,8 @@ async function markLiveFlow(page: Page, ad: TestAd) {
 async function expiryFlow(page: Page, ad: TestAd) {
   const admin = requireSupabaseAdminClient();
   // Own [test] ad only: end date one minute ago.
-  const { error } = await admin.from("assets").update({ expires_at: new Date(Date.now() - 60_000).toISOString() }).eq("id", ad.assetId).eq("profile_id", PROFILE_ID);
+  const { error } = await admin.from("assets").// One second ago: after the approval was granted (the sweep only expires an end date that passed during the current approval) but already in the past.
+  update({ expires_at: new Date(Date.now() - 1_000).toISOString() }).eq("id", ad.assetId).eq("profile_id", PROFILE_ID);
   record("db: end date set to one minute ago on the test ad", !error, error?.message);
 
   const secret = process.env.CRON_SECRET;

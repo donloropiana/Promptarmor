@@ -88,13 +88,13 @@ function AcknowledgeButton({ alertIds }: { alertIds: string[] }) {
           if (failed && !failed.ok) toast.error(failed.error);
           else {
             setDone(true);
-            toast.success("Acknowledged. Decisions are unblocked.");
+            toast.success("Acknowledged");
           }
         })
       }
     >
       {pending ? <Spinner className="motion-reduce:animate-none" /> : <ShieldCheck data-icon="inline-start" />}
-      I have read this{alertIds.length > 1 ? ` (${alertIds.length} excerpts)` : ""}. Unblock decisions
+      Acknowledge{alertIds.length > 1 ? ` (${alertIds.length})` : ""}
     </Button>
   );
 }

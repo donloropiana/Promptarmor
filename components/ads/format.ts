@@ -70,7 +70,7 @@ export function tabForAsset(l: Lifecycle, now = Date.now()): Exclude<Tab, "all">
 }
 
 /** Archive is for ads that are done deciding (approved, live, rejected or waiting on a revision). */
-export const ARCHIVABLE_STATUSES = new Set(["approved", "approved_with_exceptions", "rejected", "changes_requested"]);
+export const ARCHIVABLE_STATUSES = new Set(["approved", "approved_with_exceptions", "rejected", "changes_requested", "withdrawn"]);
 
 /** Where an ad can go live. Stored as the value; free text is kept as typed. */
 export const LIVE_CHANNELS: { value: string; label: string }[] = [
@@ -239,7 +239,12 @@ export function lifecycleLine(l: Lifecycle & { liveChannel: string | null }, now
   const where = liveChannelLabel(l.liveChannel);
   const on = where ? ` on ${where}` : "";
   if (isLive(l, now)) return `Live${on} since ${formatDate(l.liveAt)}${l.expiresAt ? ` · ends ${formatDate(l.expiresAt)}` : ""}`;
-  return `Was live${on} ${formatDate(l.liveAt)}${l.expiresAt ? ` – ${formatDate(l.expiresAt)}` : ""}`;
+  const ended = l.expiresAt ? new Date(l.expiresAt).getTime() <= now : false;
+  // The end date passed: it ran its course. Otherwise nothing was taken down;
+  // the approval went away (withdrawn, or back for review) while it may still run.
+  if (ended) return `Was live${on} ${formatDate(l.liveAt)} – ${formatDate(l.expiresAt!)}`;
+  const why = l.status === "withdrawn" ? "approval withdrawn" : l.status === "re_review_due" ? "back for review" : "no longer approved";
+  return `Marked live${on} ${formatDate(l.liveAt)}${l.expiresAt ? ` · ends ${formatDate(l.expiresAt)}` : ""} · ${why}`;
 }
 
 export function formatUsd(n: number | null | undefined, opts: { precise?: boolean } = {}): string {

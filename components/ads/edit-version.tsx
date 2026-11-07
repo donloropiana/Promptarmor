@@ -68,7 +68,7 @@ export function EditVersionSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full data-[side=right]:sm:max-w-lg" aria-describedby="edit-version-desc">
         {/* Mounted only while open, so every opening starts from the current version. */}
-        {open && <EditVersionForm assetId={assetId} version={version} initialTab={initialTab} onClose={() => onOpenChange(false)} />}
+        {open && <EditVersionForm key={version.id} assetId={assetId} version={version} initialTab={initialTab} onClose={() => onOpenChange(false)} />}
       </SheetContent>
     </Sheet>
   );
@@ -117,6 +117,7 @@ function EditVersionForm({ assetId, version, initialTab, onClose }: { assetId: s
     setError(null);
     const fd = new FormData();
     fd.set("assetId", assetId);
+    fd.set("baseVersionId", version.id);
     fd.set("note", note.trim());
     if (tab === "copy") fd.set("text", text);
     else if (file) fd.set("file", file);
@@ -147,7 +148,8 @@ function EditVersionForm({ assetId, version, initialTab, onClose }: { assetId: s
       <SheetHeader className="pb-0">
         <SheetTitle>Edit V{version.versionNo}</SheetTitle>
         <SheetDescription id="edit-version-desc">
-          Nothing is overwritten: your change becomes V{version.versionNo + 1}, checked again, with the old version kept in History.
+          Nothing is overwritten: your change becomes V{version.versionNo + 1}, checked again, with the old version kept in History. You will be
+          listed as its author, so approving it yourself needs a written reason.
         </SheetDescription>
       </SheetHeader>
       <form
