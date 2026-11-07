@@ -16,6 +16,7 @@ import { AskBox } from "./ask-box";
 import { AutoRefresh } from "./auto-refresh";
 import { CreativeView, type CreativeViewMode } from "./creative-view";
 import { DecisionBar, NO_DIALOGS, blockingReason, type DecisionDialogs } from "./decision-bar";
+import { EditVersionSheet, editableText, type EditTab } from "./edit-version";
 import { APPROVED_STATUSES, formatDuration, formatUsd, isLive, relativeTime, shortSha, stageLabel } from "./format";
 import { HiddenTextAlert } from "./hidden-text-alert";
 import { History } from "./history";
@@ -63,6 +64,7 @@ export function AdPage({ detail, userId }: { detail: AdDetail; userId: string })
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [leftView, setLeftView] = useState<"current" | "changes">("current");
   const [creativeView, setCreativeView] = useState<CreativeViewMode>(detail.latest.content.format === "text" ? "text" : "preview");
+  const [edit, setEdit] = useState<EditTab | null>(null);
 
   const approved = APPROVED_STATUSES.has(detail.status);
   const archived = Boolean(detail.archivedAt);
@@ -77,6 +79,15 @@ export function AdPage({ detail, userId }: { detail: AdDetail; userId: string })
   const runFailed = Boolean(latestRun && (latestRun.status === "failed" || latestRun.status === "declined_budget"));
 
   const blocked = blockingReason(detail);
+  // "Edit" (copy or file) follows the other actions: never on an approved ad, and not while a check is running.
+  const editDisabledReason = approved ? "This ad is approved. Withdraw the approval before changing it." : detail.checking ? "Wait for the check to finish, then edit." : null;
+  const openEdit = useCallback(
+    (tab?: EditTab) => {
+      if (editDisabledReason) return;
+      setEdit(tab ?? (editableText(detail.latest).trim() ? "copy" : "file"));
+    },
+    [editDisabledReason, detail.latest],
+  );
   // For a PDF or image with no text layer: did a model read it as an image?
   const fileRead: "transcribed" | "unread" | "unknown" = detail.checking || !latestRun ? "unknown" : latestRun.status === "complete" && latestRun.transcribed ? "transcribed" : "unread";
   const nothingToCheck = (detail.latest.content.format === "pdf" || detail.latest.content.format === "image") && !detail.latest.extractedText.trim() && fileRead === "unread";
@@ -114,6 +125,11 @@ export function AdPage({ detail, userId }: { detail: AdDetail; userId: string })
           e.preventDefault();
           setDialogs({ ...NO_DIALOGS, request: true });
           break;
+        case "e":
+          if (editDisabledReason) return;
+          e.preventDefault();
+          openEdit();
+          break;
         case "x":
           if (readOnly || !selectedId) return;
           if (!detail.findings.some((f) => f.id === selectedId && f.open)) return;
@@ -137,7 +153,7 @@ export function AdPage({ detail, userId }: { detail: AdDetail; userId: string })
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [readOnly, selectedId, openIssueIds, select, blocked, detail.checking, detail.findings]);
+  }, [readOnly, selectedId, openIssueIds, select, blocked, detail.checking, detail.findings, editDisabledReason, openEdit]);
 
   const left = (
     <div className="min-w-0 p-4 sm:p-5">
@@ -165,6 +181,8 @@ export function AdPage({ detail, userId }: { detail: AdDetail; userId: string })
           rulesInForce={detail.rulesInForce}
           canAddIssue={!readOnly}
           onIssueAdded={(id, where) => select(id, where)}
+          onEdit={() => openEdit()}
+          editDisabledReason={editDisabledReason}
         />
       )}
     </div>
@@ -371,6 +389,7 @@ export function AdPage({ detail, userId }: { detail: AdDetail; userId: string })
 
       <DecisionBar detail={detail} userId={userId} dialogs={dialogs} onDialogs={setDialogs} />
       <ShortcutsDialog open={showShortcuts} onOpenChange={setShowShortcuts} shortcuts={AD_SHORTCUTS} />
+      <EditVersionSheet open={edit !== null} onOpenChange={(o) => !o && setEdit(null)} assetId={detail.id} version={detail.latest} initialTab={edit ?? "copy"} />
     </div>
   );
 }
