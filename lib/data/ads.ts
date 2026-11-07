@@ -731,6 +731,8 @@ export type AdFinding = {
   id: string;
   versionId: string;
   origin: "ai" | "reviewer";
+  /** For reviewer-added issues: who added it ("You", a name, or an email). */
+  authorLabel: string | null;
   severity: Severity;
   /** Severity as the AI (or reviewer) set it, before any override. */
   originalSeverity: Severity;
@@ -889,6 +891,8 @@ export type AdDetail = {
   memberCount: number;
   seenIn: number;
   nextNeedsReviewId: string | null;
+  /** The workspace's rules in force (for "+ Add issue"), ordered by code. */
+  rulesInForce: { id: string; code: string; title: string }[];
   /** Server time when the detail was read; relative ages use it so server and client render the same text. */
   now: number;
 };
@@ -907,7 +911,7 @@ export async function getAdDetailWith(db: Db, assetId: string, profileId: string
   }
   if (!asset || !asset.latest_version_id || asset.is_draft) return null;
 
-  const [versionsRes, runsRes, decisionsRes, changeRes, eventsRes, membersRes, sourcesRes, nextRes] = await Promise.all([
+  const [versionsRes, runsRes, decisionsRes, changeRes, eventsRes, membersRes, sourcesRes, nextRes, rulesRes] = await Promise.all([
     db
       .from("asset_versions")
       .select("id, version_no, origin, author_id, content, extracted_text, content_sha256, storage_path, created_at")
@@ -936,6 +940,7 @@ export async function getAdDetailWith(db: Db, assetId: string, profileId: string
       .neq("asset_id", assetId)
       .in("status", [...NEEDS_REVIEW_STATUSES])
       .limit(200),
+    db.from("rules").select("id, code, current_version_id").eq("profile_id", profileId).eq("active", true).order("code", { ascending: true }),
   ]);
 
   const versionRows = versionsRes.data ?? [];
@@ -992,23 +997,37 @@ export async function getAdDetailWith(db: Db, assetId: string, profileId: string
     for (const d of data ?? []) if (d.finding_id) dispositions.set(d.finding_id, d);
   }
 
-  // Rule versions + reference library for citations.
-  const ruleVersionIds = [...new Set(usableFindings.map((f) => f.rule_version_id).filter((v): v is string => Boolean(v)))];
+  // Rule versions + reference library for citations, plus the current
+  // version of every rule in force (titles for the Add issue rule picker).
+  const inForceRows = (rulesRes.data ?? []).filter((r): r is typeof r & { current_version_id: string } => Boolean(r.current_version_id));
+  const citedVersionIds = new Set(usableFindings.map((f) => f.rule_version_id).filter((v): v is string => Boolean(v)));
+  const ruleVersionIds = [...new Set([...citedVersionIds, ...inForceRows.map((r) => r.current_version_id)])];
   const rulesById = new Map<string, { id: string; rule_id: string; title: string; body: string; reference_ids: string[]; code: string | null }>();
   const refsById = new Map<string, { id: string; label: string; citation: string; url: string | null }>();
   if (ruleVersionIds.length) {
-    const { data: rvs } = await db.from("rule_versions").select("id, rule_id, title, body, reference_ids, rules(code)").in("id", ruleVersionIds);
+    // The FK hint matters: rules also points back at rule_versions
+    // (current_version_id), so a bare rules(code) embed is ambiguous and
+    // PostgREST returns an error (no rule titles or legal links anywhere).
+    const { data: rvs, error: rvErr } = await db
+      .from("rule_versions")
+      .select("id, rule_id, title, body, reference_ids, rules!rule_versions_rule_id_fkey(code)")
+      .in("id", ruleVersionIds);
+    if (rvErr) console.error("[ads] rule versions read failed:", rvErr.code, rvErr.message);
     const refIds = new Set<string>();
     for (const rv of rvs ?? []) {
       const rule = Array.isArray(rv.rules) ? rv.rules[0] : rv.rules;
       rulesById.set(rv.id, { id: rv.id, rule_id: rv.rule_id, title: rv.title, body: rv.body, reference_ids: rv.reference_ids ?? [], code: (rule as { code?: string } | null)?.code ?? null });
-      for (const r of rv.reference_ids ?? []) refIds.add(r);
+      // Legal sources only for the rules an issue cites; the picker needs just titles.
+      if (citedVersionIds.has(rv.id)) for (const r of rv.reference_ids ?? []) refIds.add(r);
     }
     if (refIds.size) {
       const { data: refs } = await db.from("reference_library").select("id, label, citation, url").in("id", [...refIds]);
       for (const r of refs ?? []) refsById.set(r.id, r);
     }
   }
+  const rulesInForce = inForceRows
+    .map((r) => ({ id: r.id, code: r.code, title: rulesById.get(r.current_version_id)?.title ?? "" }))
+    .filter((r) => r.title !== "");
 
   const users = await loadUsers(db, [
     ...versionRows.map((v) => v.author_id),
@@ -1017,6 +1036,7 @@ export async function getAdDetailWith(db: Db, assetId: string, profileId: string
     ...(eventsRes.data ?? []).map((e) => e.actor_id),
     ...[...dispositions.values()].map((d) => d.actor_id),
     ...(alertsRes.data ?? []).map((a) => a.acknowledged_by),
+    ...usableFindings.map((f) => f.author_id),
   ]);
   const label = (id: string | null | undefined): string | null => {
     if (!id) return null;
@@ -1066,6 +1086,7 @@ export async function getAdDetailWith(db: Db, assetId: string, profileId: string
       id: f.id,
       versionId: f.asset_version_id,
       origin: f.origin === "reviewer" ? "reviewer" : "ai",
+      authorLabel: f.origin === "reviewer" ? label(f.author_id) : null,
       severity: effective,
       originalSeverity: original,
       evidenceType: f.evidence_type,
@@ -1229,6 +1250,7 @@ export async function getAdDetailWith(db: Db, assetId: string, profileId: string
     memberCount: membersRes.data?.length ?? 1,
     seenIn: sourcesRes.data?.length ?? 0,
     nextNeedsReviewId: next?.id ?? null,
+    rulesInForce,
     now: Date.now(),
   };
 }

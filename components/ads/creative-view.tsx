@@ -1,13 +1,14 @@
 "use client";
 
-import { ExternalLink, FileText, Image as ImageIcon } from "lucide-react";
+import { ExternalLink, FileText, Image as ImageIcon, Plus } from "lucide-react";
 import { cn } from "cn";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { AdFinding, AdVersion } from "@/lib/data/ads";
 
+import { AddIssueDialog, readAdSelection, type AdSelection, type RuleOption } from "./add-issue";
 import { channelLabel } from "./format";
 
 export type Mark = { id: string; start: number; end: number; severity: AdFinding["severity"] };
@@ -76,7 +77,8 @@ function MarkedText({
 }) {
   const segments = useMemo(() => segment(text, marks, from ?? 0, to ?? text.length), [text, marks, from, to]);
   return (
-    <p className={cn("whitespace-pre-wrap leading-relaxed [overflow-wrap:anywhere]", className)} dir="auto">
+    // data-ad-text: only text under this attribute can become an "Add issue" quote (labels never do).
+    <p data-ad-text className={cn("whitespace-pre-wrap leading-relaxed [overflow-wrap:anywhere]", className)} dir="auto">
       {segments.map((seg, i) => {
         if (seg.marks.length === 0) return <span key={i}>{seg.text}</span>;
         const primary = seg.marks.find((m) => m.id === selectedId) ?? seg.marks[0];
@@ -158,7 +160,7 @@ function TextCard({
         const sameAsPrevious = i > 0 && ranges[i - 1].label === r.label;
         return (
           <section key={r.id} className={cn("px-4 sm:px-6", sameAsPrevious ? "pb-3" : "py-3", i > 0 && !sameAsPrevious && "border-t")}>
-            {!sameAsPrevious && <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{r.label}</div>}
+            {!sameAsPrevious && <div className="mb-1 select-none text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{r.label}</div>}
             <MarkedText
               text={text}
               marks={marks}
@@ -253,6 +255,10 @@ function NoTextNote({ kind, fileRead }: { kind: "PDF" | "image"; fileRead: "tran
  */
 export type CreativeViewMode = "preview" | "text";
 
+/** Size the floating "+ Add issue" button is placed and clamped with (h-7 = 28px). */
+const FLOAT_BUTTON_WIDTH = 112;
+const FLOAT_BUTTON_HEIGHT = 28;
+
 export function CreativeView({
   version,
   findings,
@@ -263,6 +269,9 @@ export function CreativeView({
   view,
   onViewChange,
   fileRead = "unknown",
+  rulesInForce = [],
+  canAddIssue = false,
+  onIssueAdded,
 }: {
   version: AdVersion;
   findings: AdFinding[];
@@ -279,14 +288,22 @@ export function CreativeView({
    * finished ("unknown"). Decides what the empty text view says.
    */
   fileRead?: "transcribed" | "unread" | "unknown";
+  /** Rules that are on, for the Add issue rule picker. */
+  rulesInForce?: RuleOption[];
+  /** "+ Add issue" is offered only while the ad can still take decisions (not approved). */
+  canAddIssue?: boolean;
+  /** Called with the new issue's id so the page can select it. */
+  onIssueAdded?: (findingId: string) => void;
 }) {
   const format = version.content.format;
   const text = version.extractedText || version.content.text || "";
   const marks = useMemo(() => marksFor(findings, text), [findings, text]);
   const containerRef = useRef<HTMLDivElement>(null);
+  const textWrapRef = useRef<HTMLDivElement>(null);
   const reduceMotion = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-  // Selecting an issue: scroll its words into view (DOM only).
+  // Selecting an issue: scroll its words into view (DOM only). Re-runs when
+  // the findings change so a just-added issue is found once the page refreshes.
   useEffect(() => {
     if (!selectedId) return;
     const t = setTimeout(() => {
@@ -294,7 +311,77 @@ export function CreativeView({
       el?.scrollIntoView({ block: "center", behavior: reduceMotion ? "auto" : "smooth" });
     }, 30);
     return () => clearTimeout(t);
-  }, [selectedId, view, reduceMotion]);
+  }, [selectedId, view, reduceMotion, findings]);
+
+  // ---- "+ Add issue" from a text selection -------------------------------
+  const showingText = (view === "text" || format === "text") && text.trim().length > 0;
+  const addIssueAvailable = canAddIssue && showingText;
+  const [floating, setFloating] = useState<{ quote: string; left: number; top: number } | null>(null);
+  const [dialog, setDialog] = useState<{ quote: string; editable: boolean } | null>(null);
+
+  /** Reads the selection; shows the floating button by its last line when it is ad text. */
+  const captureSelection = useCallback(() => {
+    const wrap = textWrapRef.current;
+    if (!addIssueAvailable || !wrap) return;
+    const sel: AdSelection | null = readAdSelection(wrap);
+    if (!sel) {
+      setFloating(null);
+      return;
+    }
+    // Above the first selected line (it never covers what comes next);
+    // below the last line when there is no room above.
+    const box = wrap.getBoundingClientRect();
+    const above = sel.first.top - box.top - FLOAT_BUTTON_HEIGHT - 6;
+    const anchor = above >= 0 ? sel.first : sel.rect;
+    const left = Math.max(0, Math.min(anchor.right - box.left, box.width - FLOAT_BUTTON_WIDTH));
+    const top = above >= 0 ? above : sel.rect.bottom - box.top + 6;
+    setFloating({ quote: sel.quote, left, top });
+  }, [addIssueAvailable]);
+
+  // The button goes away as soon as the selection collapses or leaves the
+  // text; a selection made by touch handles or the keyboard (no mouseup)
+  // shows it once the selection settles.
+  useEffect(() => {
+    if (!addIssueAvailable) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const onChange = () => {
+      if (timer) clearTimeout(timer);
+      const s = window.getSelection();
+      const wrap = textWrapRef.current;
+      if (!s || s.isCollapsed || s.rangeCount === 0 || !wrap) {
+        setFloating(null);
+        return;
+      }
+      const r = s.getRangeAt(0);
+      if (!wrap.contains(r.startContainer) || !wrap.contains(r.endContainer)) {
+        setFloating(null);
+        return;
+      }
+      timer = setTimeout(captureSelection, 250);
+    };
+    document.addEventListener("selectionchange", onChange);
+    return () => {
+      if (timer) clearTimeout(timer);
+      document.removeEventListener("selectionchange", onChange);
+    };
+  }, [addIssueAvailable, captureSelection]);
+
+  // Keyboard selection (caret browsing, shift+arrows) ends on keyup.
+  const onTextKeyUp = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.shiftKey || e.key === "Shift") captureSelection();
+    },
+    [captureSelection],
+  );
+
+  const openDialog = useCallback(
+    (quote: string | null) => {
+      const q = (quote ?? readAdSelection(textWrapRef.current)?.quote ?? "").trim();
+      setFloating(null);
+      setDialog({ quote: q, editable: q.length === 0 });
+    },
+    [],
+  );
 
   const header = (
     <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -305,6 +392,12 @@ export function CreativeView({
         {format === "image" && (version.content.filename || "Image")}
       </div>
       <div className="flex items-center gap-2">
+        {addIssueAvailable && (
+          <Button type="button" size="sm" variant="outline" className="h-7 text-xs" onClick={() => openDialog(null)} title="Select words in the ad text, then add an issue for them">
+            <Plus data-icon="inline-start" />
+            Add issue
+          </Button>
+        )}
         {format !== "text" && (
           <Tabs value={view} onValueChange={(v) => onViewChange(v as CreativeViewMode)}>
             <TabsList className="h-7">
@@ -344,7 +437,7 @@ export function CreativeView({
         <div className="space-y-3">
           {pages.map((p, i) => (
             <div key={i} className="rounded-xl border bg-card p-4 sm:p-6">
-              {pages.length > 1 && <div className="mb-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Page {i + 1}</div>}
+              {pages.length > 1 && <div className="mb-2 select-none text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Page {i + 1}</div>}
               <MarkedText text={text} marks={marks} selectedId={selectedId} onSelect={onSelect} from={p.start} to={p.end} className="text-sm" />
             </div>
           ))}
@@ -355,7 +448,7 @@ export function CreativeView({
     } else if (format === "image") {
       body = text.trim() ? (
         <div className="rounded-xl border bg-card p-4 sm:p-6">
-          <div className="mb-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Text read from the image</div>
+          <div className="mb-2 select-none text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Text read from the image</div>
           <MarkedText text={text} marks={marks} selectedId={selectedId} onSelect={onSelect} className="text-sm" />
         </div>
       ) : (
@@ -393,7 +486,42 @@ export function CreativeView({
   return (
     <div ref={containerRef}>
       {header}
-      {body}
+      {addIssueAvailable ? (
+        <div ref={textWrapRef} className="relative" onMouseUp={captureSelection} onTouchEnd={captureSelection} onKeyUp={onTextKeyUp}>
+          {body}
+          {floating && (
+            <Button
+              type="button"
+              size="sm"
+              data-add-issue-floating
+              className="absolute z-10 h-7 shadow-md"
+              style={{ left: floating.left, top: floating.top }}
+              // Keep the selection: a mousedown on the button must not collapse it.
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => openDialog(floating.quote)}
+            >
+              <Plus data-icon="inline-start" />
+              Add issue
+            </Button>
+          )}
+        </div>
+      ) : (
+        body
+      )}
+      {addIssueAvailable && (
+        <AddIssueDialog
+          open={dialog !== null}
+          onOpenChange={(o) => {
+            if (!o) setDialog(null);
+          }}
+          assetVersionId={version.id}
+          versionNo={version.versionNo}
+          quote={dialog?.quote ?? ""}
+          quoteEditable={dialog?.editable ?? false}
+          rules={rulesInForce}
+          onAdded={(id) => onIssueAdded?.(id)}
+        />
+      )}
     </div>
   );
 }

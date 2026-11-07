@@ -58,7 +58,7 @@ An unknown model id is priced like Sonnet 5.5 so estimates and reservations stay
 
 - `AI_MODE=live doppler run -p promptarmor -c prd -- bun --conditions=react-server scripts/record-fixtures.ts [--only k1,k2] [--force] [--dry-run]`: the one place model calls happen outside production. Records every fixture and every sample revision into `fixtures/recorded/<key>.json`; skips targets already recorded with the same text hash, prompt hash and model; writes nothing unless every call succeeded (a gateway refusal such as `customer_verification_required` exits 1 with an explanation).
 - `bun --conditions=react-server scripts/eval.ts --recorded`: recall / false positives / hidden-text numbers from the recordings, $0. `--no-model` scores the deterministic checks alone. Without a flag it needs `AI_MODE=live` and refuses otherwise.
-- `scripts/dev-create-ad.ts` runs the engine the way the app does and follows `AI_MODE`.
+- `scripts/create-ad.ts` runs the engine the way the app does and follows `AI_MODE`.
 
 ## Environment
 

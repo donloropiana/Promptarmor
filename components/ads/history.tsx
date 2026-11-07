@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { AdDecision, AdDetail, AdEvent, AdRun } from "@/lib/data/ads";
 
-import { formatDuration, formatUsd, productLabel, shortSha, statusWord } from "./format";
+import { formatDuration, formatUsd, productLabel, severityLabel, shortSha, statusWord } from "./format";
 import { LocalDateTime, useLocalDateTime } from "./local-time";
 
 type Entry = { id: string; at: string; who: string | null; what: string; detail?: string; decision?: AdDecision; run?: AdRun };
@@ -49,6 +49,11 @@ function describeEvent(e: AdEvent, detail: AdDetail): { what: string; detail?: s
       return { what: "Accepted as an ad from a connected account" };
     case "triage.declined":
       return { what: "Marked as not an ad" };
+    case "finding.added": {
+      const sev = typeof d.severity === "string" ? d.severity : "";
+      const quote = typeof d.quote === "string" ? d.quote : "";
+      return { what: `Issue added${sev ? ` (${severityLabel(sev)})` : ""}`, detail: quote ? `“${quote}”` : undefined };
+    }
     default:
       // analysis.completed / failed / declined_budget / manual_review are
       // rendered from the runs themselves (with model, tokens and cost).

@@ -1,5 +1,7 @@
 # Overnight handoff (written 2026-11-06 ~18:40 CST)
 
+> **Status (2026-11-07 06:00 UTC):** this was the brief for the overnight build and is kept as a record of how the work was organised. The build is done; `README.md` and `docs/PROGRESS.md` describe the product as it is. Facts below that have since changed: starter rules and products are now seeded by app code when a workspace is created; `AI_GATEWAY_API_KEY` is set on Vercel (a key capped at $2/day) rather than OIDC; the sign-in page offers the emailed link plus a code field (the code only arrives once the templates in `docs/setup.md` are installed); the overnight cloud routine was disabled once the local session took over.
+
 You are continuing a take-home build with NO human available until morning. Read this whole file, then `docs/PROGRESS.md`, then work. Record everything you do in `docs/PROGRESS.md`.
 
 ## The job

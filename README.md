@@ -60,6 +60,7 @@ Inserting a version makes a database trigger queue an `analysis_runs` row. The s
 ### Decisions
 
 - **Not a problem** (X) per issue, with a reason and a 40-character note for Critical and Major.
+- **Add issue**: highlight any words in the ad text → **+ Add issue** (severity, the rule it breaks, why). Recorded as a reviewer finding with its author; it weighs at approval time exactly like an AI finding.
 - **Approve V\<n\>** (A): the exact version is restated with its hash; each open Critical/Major issue needs its own written exception; an attestation box; a rationale if you authored the version. Self-approval with exceptions is blocked when the workspace has more than one member.
 - **Request changes** (R): a note built from the open issues, editable, with **Copy as text**; status becomes Changes requested; the next version arrives as a revision.
 - **What changed** on V2+: inline word diff and Fixed / Still there / New labels.
@@ -154,7 +155,6 @@ Honest list as of this commit; see [docs/PROGRESS.md](docs/PROGRESS.md) for the 
 - **Without the model, recall is low by design.** `scripts/eval.ts --no-model` over the 20 fixtures: 6 of 24 expected rule codes found (25%), 0 false positives, hidden text 1/1, $0. The deterministic layer covers numbers against product terms and hidden text; judgment rules (approval claims, superlatives, disclosures) need the model. No live-model numbers are published here because no live run has been possible yet.
 - **Outlook and OneDrive are untested end to end.** The adapters exist and share the pipeline with Gmail and Drive, but no Microsoft account has been connected against production.
 - **Cron is daily** (Vercel Hobby). Checks normally run in `after()` right after intake and stale runs are nudged on every Ads list load; the cron is the safety net, so a run lost to a cold start can wait up to a day if nobody opens the list.
-- **Reviewer-added issues are not built.** "Highlight text → Add issue" from the spec is missing; the schema supports `origin = 'reviewer'` findings.
 - **No recordings are committed yet.** `AI_MODE=replay` reads `fixtures/recorded/`, which can only be filled by one live run per sample once the gateway serves; until then replay behaves like `off`.
 - **Images are checked from a transcription.** Quotes from image ads are not anchored back to pixels; the issue shows the transcribed words without a highlight. Outside live mode images are not transcribed at all.
 - **Metrics show "—" until a workspace has five decisions**, by design; a fresh workspace looks empty.
@@ -225,8 +225,8 @@ lib/
   types/     shared ad/version/finding types
 supabase/migrations/   six migrations (schema, RLS, RPCs, storage)
 fixtures/              20 known-answer ads for scripts/eval.ts; recorded/ holds replayable model output
-scripts/               seed-starter, eval, record-fixtures, test-hidden-text, smoke, verify-ads,
-                       verify-shell, stress-ads, cleanup-workspace
+scripts/               seed-starter, write-fixtures, check-fixtures, eval, record-fixtures, test-hidden-text,
+                       smoke, verify-ads, verify-shell, stress-ads, create-ad, cleanup-workspace
 docs/                  HANDOFF, PROGRESS, ui-spec, schema, security, security-review, spec-audit,
                        architecture, ai-policy, demo-script, rules-rationale, nango, setup, research/
 mockup/                the earlier clickable prototype (reference only)

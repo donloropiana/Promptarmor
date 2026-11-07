@@ -2,8 +2,9 @@
  * Browser verification of the Ads list and the ad page (Playwright + Chromium)
  * against a running dev server. It creates its own throwaway sample ads
  * (audience 'sample', titles starting "[test] "), drives every review flow in
- * a real browser at 1280px and 390px, writes screenshots, and retires the ads
- * it created at the end (status 'withdrawn', audience 'sample_cleared').
+ * a real browser at 1280px and 390px (including "+ Add issue" from a text
+ * selection), writes screenshots, and retires the ads it created at the end
+ * (status 'withdrawn', audience 'sample_cleared').
  *
  *   doppler run -p promptarmor -c prd -- env SMOKE_PASSWORD=... \
  *     PLAYWRIGHT_MODULE=$HOME/.bun/install/global/node_modules/playwright \
@@ -403,6 +404,152 @@ async function requestChangesFlow(page: Page, context: Context, ad: TestAd) {
   await page.getByRole("tab", { name: "V2" }).click();
 }
 
+/**
+ * Selects `phrase` inside the ad's text view the way a reader would (a DOM
+ * Range over the text node, then mouseup on the text container) and returns
+ * whether the floating "+ Add issue" button appeared.
+ */
+async function selectPhrase(page: Page, phrase: string): Promise<boolean> {
+  const found = await page.evaluate<boolean>(`(() => {
+    const phrase = ${JSON.stringify(phrase)};
+    const blocks = document.querySelectorAll('[data-ad-text]');
+    for (const block of blocks) {
+      const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        const i = (node.textContent || '').indexOf(phrase);
+        if (i < 0) continue;
+        const range = document.createRange();
+        range.setStart(node, i);
+        range.setEnd(node, i + phrase.length);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        block.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+        return true;
+      }
+    }
+    return false;
+  })()`);
+  if (!found) return false;
+  return page
+    .locator("[data-add-issue-floating]")
+    .waitFor({ state: "visible", timeout: 5_000 })
+    .then(() => true)
+    .catch(() => false);
+}
+
+/**
+ * "+ Add issue" on V2: select words the check missed ("Fixed rate for life"
+ * is a RATE-FIXED miss when the AI step is off), add a Major issue citing
+ * that rule, confirm it lands in the panel with its chip and quote, counts
+ * as open, and shows up in the Approve sheet as an exception; then the error
+ * path (words that are not in the ad) and finally Not a problem on the new
+ * issue so the approval flow that follows is unchanged.
+ */
+async function addIssueFlow(page: Page, ad: TestAd) {
+  await page.goto(`${BASE}/ads/${ad.assetId}`, { waitUntil: "networkidle", timeout: 60_000 });
+  await settled(page);
+  const textBefore = await bodyText(page);
+  const countLine = textBefore.match(/Issues on V2\s*(\d+) open(?: of (\d+))?/);
+  const openBefore = Number(countLine?.[1] ?? 0);
+  const cardsBefore = await page.locator("section[aria-label='Issues'] [data-finding-id]").count();
+  record("add issue: header button present on the text view", (await page.getByRole("button", { name: "Add issue", exact: true }).count()) >= 1);
+
+  const phrase = "Fixed rate for life";
+  const floating = await selectPhrase(page, phrase);
+  record("add issue: selecting words shows the floating + Add issue button", floating);
+  if (!floating) return;
+  // The button sits inside the text column, by the selection.
+  const box = await page.locator("[data-add-issue-floating]").boundingBox();
+  const textBox = await page.locator("[data-ad-text]").first().boundingBox();
+  record("add issue: floating button is inside the text column", Boolean(box && textBox && box.x >= textBox.x - 2 && box.x + box.width <= textBox.x + textBox.width + 2), box && textBox ? `button x ${Math.round(box.x)}..${Math.round(box.x + box.width)}, text x ${Math.round(textBox.x)}..${Math.round(textBox.x + textBox.width)}` : "missing");
+  await page.locator("[data-add-issue-floating]").click();
+  const dialog = page.getByRole("dialog", { name: "Add an issue" });
+  record("add issue: dialog opens", await dialog.waitFor({ state: "visible", timeout: 5_000 }).then(() => true).catch(() => false));
+  const quoted = await dialog.locator("[data-add-issue-quote]").innerText().catch(() => "");
+  record("add issue: dialog quotes the selected words read-only", quoted.trim() === phrase, `“${quoted.trim()}”`);
+  const submit = dialog.getByRole("button", { name: "Add issue", exact: true });
+  record("add issue: submit disabled until a 10-character reason", await submit.isDisabled());
+  record("add issue: severity defaults to Major", /Major/.test(await dialog.locator("#add-issue-severity").innerText()));
+  await dialog.locator("#add-issue-rule").click();
+  const ruleOptions = await page.getByRole("option").count();
+  record("add issue: rule picker lists No specific rule plus the rules that are on", ruleOptions >= 2 && (await page.getByRole("option", { name: "No specific rule" }).count()) === 1, `${ruleOptions} options`);
+  await page.getByRole("option", { name: /RATE-FIXED/ }).click();
+  await dialog.locator("#add-issue-why").fill("“For life” promises a rate that never changes; PL-1 is fixed for the loan term only, and the ad should say so.");
+  record("add issue: submit enabled once valid", await submit.isEnabled());
+  await shot(page, "add-issue-dialog");
+  await submit.click();
+  record("add issue: toast Issue added", await waitForText(page, /Issue added/, 20_000));
+  await dialog.waitFor({ state: "hidden", timeout: 5_000 }).catch(() => undefined);
+
+  // The new issue is in the panel, with its chip, quote, rule and author.
+  const newCard = page.locator("section[aria-label='Issues'] [data-finding-id]", { hasText: /Added by (you|reviewer)/ });
+  const cardShown = await newCard.first().waitFor({ state: "visible", timeout: 20_000 }).then(() => true).catch(() => false);
+  record("add issue: new issue shows in the panel with the Added by you/reviewer chip", cardShown);
+  const cardText = cardShown ? await newCard.first().innerText() : "";
+  record("add issue: card quotes the words and names the rule", cardText.includes(phrase) && /RATE-FIXED/.test(cardText), cardText.replace(/\s+/g, " ").slice(0, 160));
+  record("add issue: it is selected and its words highlighted in the ad", (await page.locator(`mark[data-selected]`).count()) >= 1 && (await newCard.first().locator("button[aria-pressed='true']").count()) === 1);
+  const textAfter = await bodyText(page);
+  const countAfter = textAfter.match(/Issues on V2\s*(\d+) open(?: of (\d+))?/);
+  const openAfter = Number(countAfter?.[1] ?? 0);
+  const cardsAfter = await page.locator("section[aria-label='Issues'] [data-finding-id]").count();
+  record("add issue: open count went up by one", openAfter === openBefore + 1 && cardsAfter === cardsBefore + 1, `${openBefore} -> ${openAfter} open, ${cardsBefore} -> ${cardsAfter} cards`);
+  record("add issue: history records it", /Issue added/.test(textAfter));
+  await shot(page, "add-issue-panel");
+
+  // The Approve sheet now wants a written exception for it.
+  await page.mouse.move(5, 5);
+  await page.keyboard.press("a");
+  const sheet = page.getByRole("dialog", { name: /Approve V2/ });
+  const sheetOpen = await sheet.waitFor({ state: "visible", timeout: 5_000 }).then(() => true).catch(() => false);
+  record("add issue: Approve sheet opens", sheetOpen);
+  if (sheetOpen) {
+    const sheetText = await sheet.innerText();
+    const fields = await sheet.locator("textarea[id^='exc-text-']").count();
+    record("add issue: Approve sheet lists the reviewer issue as needing an exception", fields >= 1 && sheetText.includes(phrase), `${fields} exception field(s)`);
+    await shot(page, "add-issue-approve-sheet");
+    await page.keyboard.press("Escape");
+    await sheet.waitFor({ state: "hidden", timeout: 5_000 }).catch(() => undefined);
+  }
+
+  // Error path: words that are not in the ad (typed into the editable quote box).
+  await page.evaluate<void>("window.getSelection() && window.getSelection().removeAllRanges()");
+  await page.waitForTimeout(300);
+  record("add issue: floating button gone once the selection is cleared", (await page.locator("[data-add-issue-floating]").count()) === 0);
+  await page.getByRole("button", { name: "Add issue", exact: true }).first().click();
+  const dialog2 = page.getByRole("dialog", { name: "Add an issue" });
+  record("add issue: header button opens the dialog without a selection", await dialog2.waitFor({ state: "visible", timeout: 5_000 }).then(() => true).catch(() => false));
+  await dialog2.locator("#add-issue-quote").fill("Zero percent forever, guaranteed by the moon");
+  await dialog2.locator("#add-issue-why").fill("These words are not in the ad; the server must refuse them.");
+  await dialog2.getByRole("button", { name: "Add issue", exact: true }).click();
+  const inlineError = dialog2.getByRole("alert");
+  const errored = await inlineError.waitFor({ state: "visible", timeout: 20_000 }).then(() => true).catch(() => false);
+  record("add issue: words not in the ad -> inline error", errored && /not in this version of the ad/.test((await inlineError.innerText().catch(() => "")) ?? ""), errored ? await inlineError.innerText() : "no error shown");
+  await shot(page, "add-issue-error");
+  await page.keyboard.press("Escape");
+  await dialog2.waitFor({ state: "hidden", timeout: 5_000 }).catch(() => undefined);
+  const cardsAfterError = await page.locator("section[aria-label='Issues'] [data-finding-id]").count();
+  record("add issue: nothing was added on the error path", cardsAfterError === cardsAfter, `${cardsAfterError} cards`);
+
+  // Not a problem on the reviewer issue (same per-issue action as AI issues), so the approve step below is unchanged.
+  const header = newCard.first().locator("button").first();
+  if ((await header.getAttribute("aria-pressed")) !== "true") await header.click();
+  await newCard.first().getByRole("button", { name: /Not a problem/ }).click();
+  const form = page.getByText("Not a problem: why?");
+  const formOpen = await form.waitFor({ state: "visible", timeout: 5_000 }).then(() => true).catch(() => false);
+  record("add issue: reviewer issue takes Not a problem like any other", formOpen);
+  if (formOpen) {
+    await page.getByRole("combobox", { name: /Reason/ }).click();
+    await page.getByRole("option", { name: /Not applicable/ }).click();
+    await page.locator("textarea[id^='note-']").fill(DISMISS_NOTE);
+    await page.getByRole("button", { name: "Confirm" }).click();
+    const dismissed = await waitForText(page, /Marked Not a problem/, 20_000);
+    await page.waitForTimeout(1_500);
+    const openNow = (await bodyText(page)).match(/Issues on V2\s*(\d+) open(?: of (\d+))?/);
+    record("add issue: dismissed, open count back to where it was", dismissed && Number(openNow?.[1] ?? -1) === openBefore, `${openNow?.[1] ?? "?"} open`);
+  }
+}
+
 async function approveFlow(page: Page, ad: TestAd) {
   await page.mouse.move(5, 5);
   await page.keyboard.press("a");
@@ -570,6 +717,27 @@ async function phoneFlow(page: Page, ads: TestAd[]) {
   await page.waitForTimeout(500);
   await noHorizontalScroll(page, "hidden-text ad page");
   await shot(page, "hidden-ad");
+
+  // Add issue at phone width: the Text tab, a selection, the floating button, the dialog.
+  await page.getByRole("tab", { name: "Text" }).click();
+  await page.waitForTimeout(300);
+  const floating = await selectPhrase(page, "best personal loans");
+  record("add issue (390): floating button appears by the selection", floating);
+  if (floating) {
+    const box = await page.locator("[data-add-issue-floating]").boundingBox();
+    record("add issue (390): floating button within the viewport", Boolean(box && box.x >= 0 && box.x + box.width <= 390 + 1), box ? `x ${Math.round(box.x)}..${Math.round(box.x + box.width)}` : "missing");
+    await page.locator("[data-add-issue-floating]").click();
+  } else {
+    await page.getByRole("button", { name: "Add issue", exact: true }).first().click();
+  }
+  const dialog = page.getByRole("dialog", { name: "Add an issue" });
+  record("add issue (390): dialog opens", await dialog.waitFor({ state: "visible", timeout: 5_000 }).then(() => true).catch(() => false));
+  const dBox = await dialog.boundingBox();
+  record("add issue (390): dialog fits the phone width", Boolean(dBox && dBox.x >= 0 && dBox.x + dBox.width <= 390 + 1), dBox ? `x ${Math.round(dBox.x)} w ${Math.round(dBox.width)}` : "missing");
+  await noHorizontalScroll(page, "add issue dialog");
+  await shot(page, "add-issue-dialog");
+  await page.keyboard.press("Escape");
+  await dialog.waitFor({ state: "hidden", timeout: 5_000 }).catch(() => undefined);
   await page.setViewportSize({ width: 1280, height: 800 });
 }
 
@@ -937,6 +1105,7 @@ async function main() {
       await listFlow(page, ads);
       await checkFlow(page, ads[0]);
       await requestChangesFlow(page, context, ads[0]);
+      await addIssueFlow(page, ads[0]);
       await approveFlow(page, ads[0]);
       await hiddenTextFlow(page, ads[1]);
       await rejectAndChipsFlow(page, ads[2]);

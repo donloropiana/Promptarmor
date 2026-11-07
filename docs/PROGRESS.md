@@ -1,6 +1,6 @@
 # Progress log
 
-Active run: 2026-11-07T05:15Z (local session on Max's laptop; it refreshes this line with every push. Cloud runs: skip while it is less than 50 minutes old)
+Active run: 2026-11-07T05:52Z (local session on Max's laptop; it refreshes this line with every push. Cloud runs: skip while it is less than 50 minutes old)
 
 Read `docs/HANDOFF.md` first. Newest entries at the bottom. Keep entries short and factual.
 
@@ -37,3 +37,10 @@ Read `docs/HANDOFF.md` first. Newest entries at the bottom. Keep entries short a
 - Verified locally (AI_MODE off, ai_usage unchanged at 16 rows): tsc, lint, build; test-hidden-text 86/86, smoke 44/44, verify-shell 177/177, verify-ads 68/68 + stress 152/152. ClearPath cleaned (0 visible test ads).
 - Session cookie now httpOnly (review timer moved to /api/review-session; browser Supabase client deleted). PL-1/AFFILIATE-DISCLOSE histories carry verification versions (immutable) -> consider a fresh demo workspace.
 
+
+### 2026-11-07T06:00Z local: reviewer-added issues ("highlight text → + Add issue")
+- Built the last missing ui-spec item on the ad page: select words in the Text view → floating **+ Add issue** (also a header **Add issue** button for keyboard users; without a selection the dialog takes pasted words) → dialog "Add an issue" (quoted words read-only, Severity default Major, Rule it breaks from the rules that are on + "No specific rule", why ≥ 10 chars) → `addReviewerIssue` (`lib/actions/ads.ts`): RLS read proves membership, latest version only, not on approved ads, quote located with `locateQuote` (else "Those words are not in this version of the ad."), rule must be on and in this workspace, insert `findings` origin `reviewer` + `author_id` via the admin client, event `finding.added`, `refresh()`. New: `components/ads/add-issue.tsx`; changed: `creative-view.tsx`, `ad-page.tsx`, `issues-panel.tsx` (chip "Added by you / <name>", title "Reviewer-added issue" when no rule), `history.tsx` ("Issue added (Major) · “words”"), `lib/data/ads.ts` (`rulesInForce`, `authorLabel`).
+- Found and fixed while here: `lib/data/ads.ts` embedded `rules(code)` from `rule_versions`, which PostgREST rejects as ambiguous (two FKs between the tables), so every issue card had been rendering without its rule title and legal links; now `rules!rule_versions_rule_id_fkey(code)` and the error is logged.
+- Verified locally (AI_MODE off, `ai_usage` unchanged at 17 rows): tsc, lint, build; verify-ads 96/96 (68 + 28 new checks: floating button placement at 1280/390, dialog, rule picker, toast, panel chip/quote/rule, highlight, open count +1, history line, Approve sheet lists it as an exception, error path, Not a problem on it); smoke 44/44. ClearPath cleaned with `scripts/cleanup-workspace.ts` (4 retired; 18 older approved/decided `[test]` ads from earlier rounds are kept by design).
+- Dev-server note: after editing files while a Playwright client was connected, `next dev` (Turbopack) went into a "[Fast Refresh] rebuilding" → full reload loop on every page until restarted; restart fixed it.
+- README: Known-limitations bullet removed, "Add issue" added under Decisions; docs/schema.md notes the reviewer insert path.

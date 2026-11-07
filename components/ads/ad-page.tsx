@@ -151,6 +151,9 @@ export function AdPage({ detail, userId }: { detail: AdDetail; userId: string })
           view={creativeView}
           onViewChange={setCreativeView}
           fileRead={fileRead}
+          rulesInForce={detail.rulesInForce}
+          canAddIssue={!readOnly}
+          onIssueAdded={(id) => select(id)}
         />
       )}
     </div>

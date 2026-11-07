@@ -3,7 +3,7 @@
  * check on it and prints what happened. Uses the service-role client, so it
  * needs the real env from Doppler:
  *
- *   doppler run -p promptarmor -c prd -- bun --conditions=react-server scripts/dev-create-ad.ts \
+ *   doppler run -p promptarmor -c prd -- bun --conditions=react-server scripts/create-ad.ts \
  *     --profile cf7d66e9-54d5-4b99-ac6f-89d760a20731 \
  *     --user 88b5b90e-3f4b-46a2-8c50-333240cbb671 \
  *     [--text "..." | --file ./ad.pdf | --sample paid-social-personal-loan] [--no-run] [--revision] [--seed]

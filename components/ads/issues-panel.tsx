@@ -33,7 +33,9 @@ const EVIDENCE_TITLES: Record<string, string> = {
 };
 
 export function issueTitle(f: AdFinding): string {
-  return f.rule?.title ?? EVIDENCE_TITLES[f.evidenceType] ?? "Issue";
+  if (f.rule) return f.rule.title;
+  if (f.origin === "reviewer") return "Reviewer-added issue";
+  return EVIDENCE_TITLES[f.evidenceType] ?? "Issue";
 }
 
 export function IssuesPanel({
@@ -184,7 +186,11 @@ function IssueCard({
           {versionNo > 1 && (
             <span className={cn("rounded-full border px-1.5 text-[11px] font-medium", recheckLabel(f) === "New" ? "text-foreground" : "text-muted-foreground")}>{recheckLabel(f)}</span>
           )}
-          {f.origin === "reviewer" && <span className="rounded-full border px-1.5 text-[11px] font-medium text-muted-foreground">Added by reviewer</span>}
+          {f.origin === "reviewer" && (
+            <span className="rounded-full border px-1.5 text-[11px] font-medium text-muted-foreground" data-reviewer-chip>
+              Added by {f.authorLabel && f.authorLabel !== "You" ? f.authorLabel : f.authorLabel === "You" ? "you" : "reviewer"}
+            </span>
+          )}
           {f.severity !== f.originalSeverity && <span className="text-[11px] text-muted-foreground">was {severityLabel(f.originalSeverity)}</span>}
           {isException && <span className="rounded-full border px-1.5 text-[11px] font-medium text-muted-foreground">Accepted as exception</span>}
         </div>

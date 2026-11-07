@@ -7,6 +7,7 @@ import { after } from "next/server";
 import { z } from "zod";
 
 import { startAnalysisForVersion, askAboutAd as askAboutAdEngine } from "@/lib/ai/engine";
+import { locateQuote, spanHash } from "@/lib/ai/spans";
 import { getActiveProfileId, getCurrentUser, getMembershipRole } from "@/lib/auth/dal";
 import { getNextNeedsReviewId } from "@/lib/data/ads";
 import {
@@ -19,6 +20,7 @@ import {
   simulateRevision as simulateRevisionIntake,
 } from "@/lib/intake/ads";
 import { visibleLength } from "@/lib/intake/infer";
+import { requireSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/supabase/types";
 import type { AdFile, Product } from "@/lib/types/ads";
@@ -303,6 +305,108 @@ export async function dispositionFinding(input: z.input<typeof dispositionSchema
   if (error) return rpcFailure(error);
   refresh();
   return { ok: true, data: null };
+}
+
+const addIssueSchema = z.object({
+  assetVersionId: uuid,
+  quote: z
+    .string()
+    .trim()
+    .min(1, { error: "Select the words in the ad first." })
+    .max(500, { error: "Keep the quoted words under 500 characters: pick the few that matter." }),
+  severity: z.enum(["critical", "major", "minor"], { error: "Pick a severity." }),
+  ruleId: uuid.nullable().optional(),
+  explanation: z
+    .string()
+    .trim()
+    .min(10, { error: "Say why this is a problem (at least 10 characters)." })
+    .max(1000, { error: "Keep the explanation under 1,000 characters." }),
+});
+
+export type AddIssueInput = z.input<typeof addIssueSchema>;
+
+/**
+ * "+ Add issue": a reviewer quotes words the AI missed. Recorded as a
+ * finding with origin 'reviewer' and the author's id, anchored into the
+ * version's text (the quote must be in the ad), optionally citing the
+ * current version of one of the workspace's rules in force. At decision
+ * time the database weighs it exactly like an AI finding.
+ */
+export async function addReviewerIssue(input: AddIssueInput): Promise<ActionResult<{ findingId: string }>> {
+  const parsed = addIssueSchema.safeParse(input);
+  if (!parsed.success) return invalid(parsed.error);
+  const { assetVersionId, quote, severity, ruleId, explanation } = parsed.data;
+  if (visibleLength(quote) === 0) return { ok: false, error: "Select some visible words in the ad first.", code: "invalid_input" };
+
+  const user = await getCurrentUser();
+  if (!user) return SIGNED_OUT;
+
+  // Read under RLS: finding the version proves membership of its workspace.
+  const db = await createClient();
+  const { data: version } = await db.from("asset_versions").select("id, profile_id, asset_id, extracted_text, content").eq("id", assetVersionId).maybeSingle();
+  if (!version) return { ok: false, error: "That ad no longer exists.", code: "PT404" };
+  const { data: asset } = await db.from("assets").select("id, latest_version_id, status").eq("id", version.asset_id).maybeSingle();
+  if (!asset) return { ok: false, error: "That ad no longer exists.", code: "PT404" };
+  if (asset.latest_version_id !== version.id) return { ok: false, error: "Only the latest version can take new issues.", code: "PT409" };
+  if (asset.status === "approved" || asset.status === "approved_with_exceptions") {
+    return { ok: false, error: "This version is approved. Withdraw the approval before adding issues.", code: "PT409" };
+  }
+
+  const content = version.content && typeof version.content === "object" && !Array.isArray(version.content) ? (version.content as Record<string, unknown>) : {};
+  const text = version.extracted_text || (typeof content.text === "string" ? content.text : "") || "";
+  const anchor = locateQuote(text, quote);
+  if (!anchor) return { ok: false, error: "Those words are not in this version of the ad.", code: "invalid_input" };
+
+  // The rule must be one of this workspace's rules, in force, with a current version.
+  let ruleVersionId: string | null = null;
+  if (ruleId) {
+    const { data: rule } = await db.from("rules").select("id, active, current_version_id").eq("id", ruleId).eq("profile_id", version.profile_id).maybeSingle();
+    if (!rule || !rule.active || !rule.current_version_id) return { ok: false, error: "That rule is not in force in this workspace. Pick another or choose No specific rule.", code: "invalid_input" };
+    ruleVersionId = rule.current_version_id;
+  }
+
+  // Members have no INSERT grant on findings (the engine writes them), so the
+  // write goes through the admin client now that the RLS reads proved membership.
+  let admin: ReturnType<typeof requireSupabaseAdminClient>;
+  try {
+    admin = requireSupabaseAdminClient();
+  } catch (err) {
+    return fail(err, "Issues cannot be added on this server right now.");
+  }
+  const { data: inserted, error } = await admin
+    .from("findings")
+    .insert({
+      profile_id: version.profile_id,
+      asset_version_id: version.id,
+      origin: "reviewer",
+      author_id: user.id,
+      rule_version_id: ruleVersionId,
+      severity,
+      evidence_type: "needs_judgment",
+      quote,
+      span_hash: spanHash(quote),
+      verified_span: true,
+      anchor: { type: "text_range", start: anchor.start, end: anchor.end } as Json,
+      explanation,
+    })
+    .select("id")
+    .single();
+  if (error || !inserted) {
+    if (error) return rpcFailure(error);
+    return { ok: false, error: "Something went wrong. Please try again.", code: "failed" };
+  }
+
+  const { error: eErr } = await admin.from("events").insert({
+    profile_id: version.profile_id,
+    asset_id: version.asset_id,
+    actor_id: user.id,
+    kind: "finding.added",
+    data: { finding_id: inserted.id, asset_version_id: version.id, severity, rule_version_id: ruleVersionId, quote: quote.slice(0, 200) } as Json,
+  });
+  if (eErr) console.error("[ads] finding.added event failed:", eErr.code, eErr.message);
+
+  refresh();
+  return { ok: true, data: { findingId: inserted.id } };
 }
 
 export async function acknowledgeAlert(alertId: string): Promise<ActionResult> {
