@@ -12,14 +12,25 @@ import { LocalDateTime, useLocalDateTime } from "./local-time";
 
 type Entry = { id: string; at: string; who: string | null; what: string; detail?: string; decision?: AdDecision; run?: AdRun };
 
-function describeEvent(e: AdEvent, detail: AdDetail): { what: string; detail?: string } | null {
+type Described = { what: string; detail?: string; /** The actor is already in `what`; do not repeat it. */ actorInline?: boolean };
+
+function describeEvent(e: AdEvent, detail: AdDetail, notedVersionIds: Set<string>): Described | null {
   const d = e.data;
   switch (e.kind) {
     case "asset.created":
       return { what: "Ad created" };
     case "asset.submitted":
       return { what: "Submitted for review" };
+    case "version.added": {
+      // A reviewer's Edit copy / Replace file: "V2 by Riley: shortened the headline".
+      const no = typeof d.version_no === "number" ? d.version_no : detail.versions.find((v) => v.id === d.asset_version_id)?.versionNo;
+      const note = typeof d.note === "string" ? d.note.trim() : "";
+      const file = d.how === "replace_file" && typeof d.filename === "string" && d.filename ? d.filename : null;
+      return { what: `V${no ?? "?"} by ${e.actorLabel ?? "a member"}${note ? `: ${note}` : ""}`, detail: file ? `Replaced the file with ${file}` : undefined, actorInline: true };
+    }
     case "version.created": {
+      // The database logs this for every version; when the reviewer's own note exists for it, that entry speaks instead.
+      if (typeof d.asset_version_id === "string" && notedVersionIds.has(d.asset_version_id)) return null;
       const no = typeof d.version_no === "number" ? d.version_no : detail.versions.find((v) => v.id === d.asset_version_id)?.versionNo;
       const origin = typeof d.origin === "string" ? d.origin : "";
       const how =
@@ -104,9 +115,13 @@ function describeDecision(d: AdDecision): { what: string; detail?: string } {
 export function History({ detail }: { detail: AdDetail }) {
   const [viewing, setViewing] = useState<AdDecision | null>(null);
   const entries: Entry[] = [];
+  const notedVersionIds = new Set<string>();
   for (const e of detail.events) {
-    const desc = describeEvent(e, detail);
-    if (desc) entries.push({ id: `e${e.id}`, at: e.createdAt, who: e.actorLabel, what: desc.what, detail: desc.detail });
+    if (e.kind === "version.added" && typeof e.data.asset_version_id === "string") notedVersionIds.add(e.data.asset_version_id);
+  }
+  for (const e of detail.events) {
+    const desc = describeEvent(e, detail, notedVersionIds);
+    if (desc) entries.push({ id: `e${e.id}`, at: e.createdAt, who: desc.actorInline ? null : e.actorLabel, what: desc.what, detail: desc.detail });
   }
   for (const r of detail.runs) {
     if (r.status === "queued" || r.status === "running") continue;

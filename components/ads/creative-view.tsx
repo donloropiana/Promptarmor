@@ -1,6 +1,6 @@
 "use client";
 
-import { ExternalLink, FileText, Image as ImageIcon, Plus } from "lucide-react";
+import { ExternalLink, FileText, Image as ImageIcon, Pencil, Plus } from "lucide-react";
 import { cn } from "cn";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -272,6 +272,8 @@ export function CreativeView({
   rulesInForce = [],
   canAddIssue = false,
   onIssueAdded,
+  onEdit,
+  editDisabledReason = null,
 }: {
   version: AdVersion;
   findings: AdFinding[];
@@ -294,6 +296,10 @@ export function CreativeView({
   canAddIssue?: boolean;
   /** Called with the new issue's id so the page can select it. */
   onIssueAdded?: (findingId: string) => void;
+  /** "Edit" (edit the copy or replace the file): opens the page's edit sheet. Hidden when absent. */
+  onEdit?: () => void;
+  /** Why "Edit" is disabled right now (approved, or a check is running); null when it is available. */
+  editDisabledReason?: string | null;
 }) {
   const format = version.content.format;
   const text = version.extractedText || version.content.text || "";
@@ -392,6 +398,21 @@ export function CreativeView({
         {format === "image" && (version.content.filename || "Image")}
       </div>
       <div className="flex items-center gap-2">
+        {onEdit && (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs"
+            data-edit-version
+            disabled={editDisabledReason !== null}
+            onClick={onEdit}
+            title={editDisabledReason ?? "Edit the copy or replace the file; the change becomes the next version (E)"}
+          >
+            <Pencil data-icon="inline-start" />
+            Edit
+          </Button>
+        )}
         {addIssueAvailable && (
           <Button type="button" size="sm" variant="outline" className="h-7 text-xs" onClick={() => openDialog(null)} title="Select words in the ad text, then add an issue for them">
             <Plus data-icon="inline-start" />

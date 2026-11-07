@@ -601,6 +601,122 @@ export async function applySuggestion(input: { assetId: string; findingId: strin
   }
 }
 
+/** The "What changed" note on a reviewer-made version: one line, required. */
+const MAX_VERSION_NOTE_CHARS = 200;
+
+export type AddVersionResult = { versionId: string; versionNo: number };
+
+/**
+ * "Edit copy" / "Replace file" on the ad page: the reviewer's edited text or
+ * a new file becomes a NEW immutable version (origin reviewer_edit, author =
+ * the signed-in user) with a one-line note, and the check runs on it exactly
+ * as it does for an applied suggestion. FormData fields: assetId, note, and
+ * either text (edited or pasted copy) or file (PDF, image, HTML or text, up
+ * to 4 MB, the same limits as uploadAd). Refused while the ad is approved
+ * or its latest version is still being checked.
+ */
+export async function addReviewerVersion(formData: FormData): Promise<ActionResult<AddVersionResult>> {
+  const parsed = z
+    .object({
+      assetId: uuid,
+      note: z
+        .string()
+        .trim()
+        .min(1, { error: "Say what changed, in one line." })
+        .max(MAX_VERSION_NOTE_CHARS, { error: `Keep the note under ${MAX_VERSION_NOTE_CHARS} characters.` }),
+    })
+    .safeParse({ assetId: String(formData.get("assetId") ?? ""), note: String(formData.get("note") ?? "").replace(/\s*\n+\s*/g, " ") });
+  if (!parsed.success) return invalid(parsed.error);
+  const { assetId, note } = parsed.data;
+
+  const user = await getCurrentUser();
+  if (!user) return SIGNED_OUT;
+  // Read under RLS: finding the asset proves membership of its workspace.
+  const asset = await loadAsset(assetId);
+  if (!asset?.latest_version_id) return NOT_FOUND;
+  if (asset.status === "approved" || asset.status === "approved_with_exceptions") {
+    return { ok: false, error: "This ad is approved. Withdraw the approval before changing it.", code: "PT409" };
+  }
+  const db = await createClient();
+  const { data: run } = await db
+    .from("analysis_runs")
+    .select("status")
+    .eq("asset_version_id", asset.latest_version_id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (run && (run.status === "queued" || run.status === "running")) {
+    return { ok: false, error: "The check is still running. Wait for it to finish, then try again.", code: "PT409" };
+  }
+
+  const file = await fileFromForm(formData);
+  if (file && "ok" in file) return file;
+  const text = String(formData.get("text") ?? "").replace(/\r\n?/g, "\n").trim();
+  if (!file && visibleLength(text) < MIN_TEXT_CHARS) return { ok: false, error: "Write the ad text (at least a sentence) or choose a file.", code: "invalid_input" };
+  if (!file && text.length > MAX_TEXT_CHARS) return { ok: false, error: `That text is too long. Keep it under ${MAX_TEXT_CHARS.toLocaleString("en-US")} characters.`, code: "invalid_input" };
+
+  let result: AddVersionResult;
+  try {
+    if (file) {
+      // Same path as uploadAd: HTML and text files are decoded and stored as
+      // html/text versions; PDFs and images keep their bytes.
+      const isHtml = file.mimeType === "text/html";
+      const isText = file.mimeType === "text/plain";
+      const decoded = isHtml || isText ? new TextDecoder().decode(file.bytes) : undefined;
+      result = await addVersion({
+        assetId: asset.id,
+        userId: user.id,
+        origin: "reviewer_edit",
+        file: isHtml || isText ? undefined : file,
+        html: isHtml ? decoded : undefined,
+        text: isText ? decoded : undefined,
+        note,
+      });
+    } else {
+      result = await addVersion({ assetId: asset.id, userId: user.id, origin: "reviewer_edit", text, note });
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "";
+    if (/unchanged|identical|PT409/i.test(message)) {
+      return { ok: false, error: file ? "That file is the same as the current version, so nothing changed." : "That text is the same as the current version, so nothing changed.", code: "PT409" };
+    }
+    if (err instanceof IntakeError && PLAIN_INTAKE_CODES.has(err.code)) return { ok: false, error: err.message, code: err.code };
+    if (err instanceof IntakeError && err.code === "pdf_unreadable") {
+      console.error("[ads] pdf unreadable:", message);
+      return { ok: false, error: "That PDF could not be read. Export it again from the original file, or paste the text.", code: err.code };
+    }
+    if (err instanceof IntakeError && err.code === "mime_mismatch") return { ok: false, error: err.message, code: err.code };
+    return fail(err, "We could not create the new version. Try again.");
+  }
+
+  // The database logs version.created from the insert trigger; this row
+  // carries who made the version and their note, for History.
+  try {
+    const admin = requireSupabaseAdminClient();
+    const { error: eErr } = await admin.from("events").insert({
+      profile_id: asset.profile_id,
+      asset_id: asset.id,
+      actor_id: user.id,
+      kind: "version.added",
+      data: {
+        asset_version_id: result.versionId,
+        version_no: result.versionNo,
+        previous_version_id: asset.latest_version_id,
+        how: file ? "replace_file" : "edit_copy",
+        filename: file ? file.name.slice(0, 200) : null,
+        note,
+      } as Json,
+    });
+    if (eErr) console.error("[ads] version.added event failed:", eErr.code, eErr.message);
+  } catch (err) {
+    console.error("[ads] version.added event failed:", (err as Error).message);
+  }
+
+  kickAnalysis(result.versionId);
+  refresh();
+  return { ok: true, data: result };
+}
+
 function replaceQuote(haystack: string, quote: string, replacement: string): string | null {
   const q = quote.trim();
   if (!q) return null;

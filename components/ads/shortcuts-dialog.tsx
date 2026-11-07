@@ -14,6 +14,7 @@ export const LIST_SHORTCUTS: Shortcut[] = [
 export const AD_SHORTCUTS: Shortcut[] = [
   { keys: ["A"], label: "Approve this version" },
   { keys: ["R"], label: "Request changes" },
+  { keys: ["E"], label: "Edit copy or replace the file" },
   { keys: ["X"], label: "Not a problem (selected issue)" },
   { keys: ["J", "K"], label: "Move between issues" },
   { keys: ["Esc"], label: "Clear selection / close" },
