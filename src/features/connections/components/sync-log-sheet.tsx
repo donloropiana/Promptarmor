@@ -6,7 +6,7 @@ import { useState } from "react";
 import { dateTime, timeAgo } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import type { SyncRunRow } from "@/features/workspaces/server/queries";
+import type { SyncRunRow } from "@/features/connections/server/queries";
 
 const KIND_LABELS: Record<string, string> = {
   initial: "First sync",

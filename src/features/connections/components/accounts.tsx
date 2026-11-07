@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import type { ConnectionSummary, MemberConnections, SyncRunRow } from "@/features/workspaces/server/queries";
+import type { ConnectionSummary, MemberConnections, SyncRunRow } from "@/features/connections/server/queries";
 
 import { SyncLogSheet } from "./sync-log-sheet";
 

@@ -8,7 +8,7 @@ import { SyncLogSheet } from "@/features/connections/components/sync-log-sheet";
 import { Section } from "@/components/layout/page-header";
 import { PageSkeleton } from "@/components/layout/shell-skeleton";
 import { getActiveProfileId, requireMember } from "@/features/auth/server/dal";
-import { getConnectionsByMember, getMyConnectedIntegrations, getSyncRuns } from "@/features/workspaces/server/queries";
+import { getConnectionsByMember, getMyConnectedIntegrations, getSyncRuns } from "@/features/connections/server/queries";
 
 export const metadata: Metadata = { title: "Connected accounts · Marketing Compliance Workbench" };
 // Reads the session (see src/app/(app)/layout.tsx), so it blocks on the server by design.

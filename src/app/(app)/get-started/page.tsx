@@ -8,7 +8,7 @@ import { Section } from "@/components/layout/page-header";
 import { PageSkeleton } from "@/components/layout/shell-skeleton";
 import { Button } from "@/components/ui/button";
 import { getActiveProfileId, requireMember } from "@/features/auth/server/dal";
-import { getMyConnectedIntegrations } from "@/features/workspaces/server/queries";
+import { getMyConnectedIntegrations } from "@/features/connections/server/queries";
 
 export const metadata: Metadata = { title: "Get started · Marketing Compliance Workbench" };
 
