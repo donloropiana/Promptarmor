@@ -74,6 +74,8 @@ export function AdsList({
     return { real: list.filter((r) => !r.isSample), samples: list.filter((r) => r.isSample) };
   }, [rows, tab]);
   const visible = real.length + samples.length;
+  // Inbox arrivals belong to the queue: they show on Needs review only.
+  const arrivals = tab === "needs_review" ? triage : [];
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -133,26 +135,37 @@ export function AdsList({
         </Button>
       </div>
 
-      {tab === "needs_review" && <TriageRows items={triage} now={now} />}
-
       {visible === 0 ? (
-        <Empty className="rounded-xl border bg-card py-12">
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <Inbox />
-            </EmptyMedia>
-            <EmptyTitle>{EMPTY_COPY[tab].title}</EmptyTitle>
-            <EmptyDescription>{EMPTY_COPY[tab].body}</EmptyDescription>
-          </EmptyHeader>
-        </Empty>
+        <>
+          {arrivals.length > 0 && (
+            <div className="overflow-hidden rounded-xl border bg-card">
+              <TriageRows items={arrivals} now={now} />
+            </div>
+          )}
+          <Empty className="rounded-xl border bg-card py-12">
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <Inbox />
+              </EmptyMedia>
+              <EmptyTitle>{EMPTY_COPY[tab].title}</EmptyTitle>
+              <EmptyDescription>{EMPTY_COPY[tab].body}</EmptyDescription>
+            </EmptyHeader>
+          </Empty>
+        </>
       ) : (
         <div ref={listRef} className="space-y-3">
-          {real.length > 0 && (
-            <AnimatedUl className="divide-y rounded-xl border bg-card" aria-label={`${TABS.find((t) => t.key === tab)?.label} ads`}>
-              {real.map((row) => (
-                <AdRow key={row.id} row={row} now={now} />
-              ))}
-            </AnimatedUl>
+          {(arrivals.length > 0 || real.length > 0) && (
+            // Arrivals and ads share one card: the header line on the arrivals says what they are; no gap between them.
+            <div className="overflow-hidden rounded-xl border bg-card">
+              {arrivals.length > 0 && <TriageRows items={arrivals} now={now} />}
+              {real.length > 0 && (
+                <AnimatedUl className={cn("divide-y", arrivals.length > 0 && "border-t")} aria-label={`${TABS.find((t) => t.key === tab)?.label} ads`}>
+                  {real.map((row) => (
+                    <AdRow key={row.id} row={row} now={now} />
+                  ))}
+                </AnimatedUl>
+              )}
+            </div>
           )}
           {samples.length > 0 && (
             <section aria-labelledby="samples-heading">

@@ -405,3 +405,52 @@ function dedupe(items: HiddenTextCandidate[]): HiddenTextCandidate[] {
   }
   return out;
 }
+
+// ---------------------------------------------------------------------------
+// Plain English for a location
+// ---------------------------------------------------------------------------
+
+const REASON_WORDS: Record<string, string> = {
+  "font-size 0-4px": "a 0–4 px font",
+  "font-size near zero": "a near-zero font size",
+  "opacity near 0": "near-zero opacity",
+  "filter opacity 0": "a zero-opacity filter",
+  "display none": "display: none",
+  "visibility hidden": "visibility: hidden",
+  "mso-hide": "an Outlook-only hide",
+  "off-screen": "an off-screen position",
+  "off-screen transform": "an off-screen transform",
+  "scaled to nothing": "a zero scale",
+  "white text": "white-on-white text",
+  "hidden attribute": "the hidden attribute",
+  "aria-hidden": "aria-hidden",
+  "svg fill none": "an invisible SVG fill",
+  "svg opacity 0": "zero SVG opacity",
+  "svg font-size 0": "a zero SVG font size",
+  "svg hidden": "a hidden SVG",
+  "zero size": "a zero-size box",
+  "hidden by stylesheet class": "a stylesheet class that hides it",
+};
+
+/**
+ * The stored location ("html:span@char 788 (font-size 0-4px)", "text:line 12")
+ * is a developer's locator. This is what a reviewer reads instead:
+ * "in a <span>, hidden by a 0–4 px font".
+ */
+export function describeLocation(location: string | null | undefined): string | null {
+  if (!location) return null;
+  const html = location.match(/^html:(\S+?)(?: data: URI)?@char \d+(?: \((.+)\))?$/);
+  if (html) {
+    const tag = html[1];
+    const inDataUri = / data: URI@/.test(location);
+    const reason = html[2];
+    const where = tag === "comment" ? "in an HTML comment" : tag === "head" ? "in the page head, outside the visible ad" : inDataUri ? `inside a data: URI in a <${tag}>` : `in a <${tag}>`;
+    if (!reason) return where;
+    const plain = REASON_WORDS[reason] ?? reason;
+    if (/is not part of the visible ad$/.test(reason)) return `${where}, which is not part of the visible ad`;
+    return `${where}, hidden by ${plain}`;
+  }
+  const text = location.match(/^text:line (\d+)(?: \((.+)\))?$/);
+  if (text) return `on line ${text[1]}${text[2] ? ` (${text[2]})` : ""}`;
+  return location;
+}

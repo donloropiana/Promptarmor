@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { acknowledgeAlert } from "@/features/ads/server/actions/review";
 import type { AdAlert } from "@/features/ads/server/queries/detail";
+import { describeLocation } from "@/features/analysis/hidden-text";
 
 import { LocalDateTime } from "@/features/ads/components/local-time";
 
@@ -42,7 +43,7 @@ export function HiddenTextAlert({ alerts, issueCount }: { alerts: AdAlert[]; iss
               <li key={a.id} className="rounded-lg border bg-muted/40 p-2.5">
                 <div className="mb-1 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
                   <span className="font-medium text-foreground">{a.kind === "possible_injection" ? "Possible instruction" : "Hidden text"}</span>
-                  {a.location && <span>· {a.location}</span>}
+                  {a.location && <span>· {describeLocation(a.location)}</span>}
                   {a.acknowledgedAt && (
                     <span>
                       · acknowledged by {a.acknowledgedBy ?? "a member"} <LocalDateTime iso={a.acknowledgedAt} />

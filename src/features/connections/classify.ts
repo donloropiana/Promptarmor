@@ -170,7 +170,7 @@ export function classifyItem(input: ClassifyInput): ClassifyResult {
     if (m.total >= 2 && n.total < m.total) {
       return {
         classification: "marketing",
-        reason: `Creative file type (${mime}) with marketing signals in its name: ${m.labels.join(", ")}`,
+        reason: `Creative file (${mime}) whose name reads like an ad; content not read yet`,
         inferred: inferred(net),
       };
     }
@@ -191,7 +191,8 @@ export function classifyItem(input: ClassifyInput): ClassifyResult {
   if (m.total >= 5 && m.total >= 2 * n.total) {
     return {
       classification: "marketing",
-      reason: `Marketing signals: ${m.labels.join(", ")}`,
+      // The row's chip already says "Looks like an ad"; a list of matched words adds nothing a person can act on.
+      reason: "",
       inferred: inferred(net),
     };
   }

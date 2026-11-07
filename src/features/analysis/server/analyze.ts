@@ -4,7 +4,7 @@ import type { Product } from "@/features/products/catalog";
 import type { Severity } from "@/features/rules/severity";
 
 import { MODELS, costUsd } from "@/lib/ai/budget";
-import { detectHiddenText } from "@/features/analysis/hidden-text";
+import { describeLocation, detectHiddenText } from "@/features/analysis/hidden-text";
 import { cheapProviderOptions, tryModels } from "@/lib/ai/ladder";
 import { assertModelCallsAllowed } from "@/lib/ai/mode";
 import { runOfferChecks } from "@/features/analysis/offer-checks";
@@ -123,8 +123,8 @@ export function hiddenTextFindings(hidden: HiddenTextCandidate[], rules: RuleInp
     quote: h.excerpt,
     explanation:
       h.kind === "possible_injection"
-        ? `This text is written for an automated reviewer, not a consumer (${h.location}). It was treated as content only: it changed nothing and cannot approve anything.`
-        : `This text is hidden from readers (${h.location}). Text a person cannot see is not a disclosure and should not be in the ad.`,
+        ? `This text is written for an automated reviewer, not a consumer; it sits ${describeLocation(h.location) ?? "in the file"}. It was treated as content only: it changed nothing and cannot approve anything.`
+        : `This text is hidden from readers: it sits ${describeLocation(h.location) ?? "in the file"}. Text a person cannot see is not a disclosure and should not be in the ad.`,
     suggested_fix: "Remove the hidden text and ask the submitter why it was there.",
     evidence_type: "exact_match",
   }));

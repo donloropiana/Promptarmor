@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, ChevronRight, HardDrive, Mail, Sparkles, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, HardDrive, Inbox, Mail, Sparkles, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
@@ -22,11 +22,18 @@ import { productLabel } from "@/features/products/catalog";
 export function TriageRows({ items, now }: { items: TriageRow[]; now: number }) {
   if (items.length === 0) return null;
   return (
-    <ul className="divide-y rounded-xl border bg-card" aria-label="Arrived from your inbox and drive">
-      {items.map((t) => (
-        <TriageItem key={t.id} item={t} now={now} />
-      ))}
-    </ul>
+    <section aria-label="Arrived from your inbox and drive">
+      <div className="flex flex-wrap items-center gap-x-1.5 border-b bg-muted/30 px-3 py-1.5 text-xs text-muted-foreground sm:px-4">
+        <Inbox aria-hidden className="size-3.5" />
+        <span className="font-medium text-foreground/80">From your inbox</span>
+        <span>· only you see these until you open one · click to open and check</span>
+      </div>
+      <ul className="divide-y">
+        {items.map((t) => (
+          <TriageItem key={t.id} item={t} now={now} />
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -78,8 +85,7 @@ function TriageItem({ item, now }: { item: TriageRow; now: number }) {
             {item.reason ? ` · ${item.reason}` : ""}
             {item.product !== "unknown" ? ` · ${productLabel(item.product)}` : ""}
             {item.channel ? ` · ${channelLabel(item.channel)}` : ""}
-            {" · "}
-            <span className="text-foreground/70">{pending && choice === "open" ? "Opening…" : "Click to open and check"}</span>
+            {pending && choice === "open" ? <span className="text-foreground/70"> · Opening…</span> : null}
           </div>
         </div>
       </button>
