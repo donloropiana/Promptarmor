@@ -147,12 +147,23 @@ Four ad statuses in the UI (Needs review, Changes requested, Approved, Rejected)
 - **Deterministic before probabilistic.** Numbers against product terms and hidden-text detection run in code before the model and survive a model failure. The model adds judgment, not arithmetic.
 - **Deliberately out of scope:** state advertising law (the rules are federal plus ClearPath policy), rasterising PDF pages into images for the model (PDFs are text-extracted; image-only PDFs are transcribed), campaign grouping, assignment and snoozing, and any role beyond owner | member.
 
+## Roadmap (what a second week builds, by leverage)
+
+Written after a six-lens design review on the morning of hand-in; the decisions are the author's.
+
+1. **Beyond the rulebook.** The check may report up to two "Worth a look (not a rule yet)" concerns outside the rulebook, each with a citation parsed by code and checked against eCFR only when a reviewer clicks, never steered by ad content; **Propose as rule** opens the editor with the rule off. This is the recall valve the closed rule list lacks, without giving up reproducibility.
+2. **Law on the rule, not a law library.** Per rule version: pinpoint citation, point-in-time eCFR link, retrieval date, the verbatim paragraph relied on (fetched by code from the official host at drafting time), and the section's last-amended date for a **Law changed** tag that mirrors **Rates changed**. No full-text mirror: nothing reads it at check time, and a dated link plus the paragraph is what an examiner asks for.
+3. **Rule origin.** Onboarding research ("what do you sell, where, to whom") that proposes a rulebook with fetched excerpts, accepted line by line; rule packs per vertical replacing the hard-coded lender product list and the "US consumer lender" prompt header, so the desk works for any company.
+4. **Product terms as prose.** Paste a rate sheet or pricing page; the model extracts the typed facts; a person confirms; versioning and re-review stay keyed on the product version. "Products" keeps its name; the second tab becomes **Product terms** with one sentence under each tab.
+5. **Standing control instead of a gate.** Rule-change re-check scoped to the rule's ads; URL arrivals diffed against the approved version; the approved record recalled whenever anything it relied on moves.
+6. **Arrivals.** Connect offered on the empty Ads list (never required); openable candidate rows with the text; a cheap model classification for the "Could be an ad" rows (a few hundredths of a cent each).
+
 ## Known limitations
 
 Honest list as of this commit; see [docs/PROGRESS.md](docs/PROGRESS.md) for the running log.
 
-- **The model path needs a card on the Vercel team.** The AI Gateway currently answers `customer_verification_required` for this team, so in production every check ends `failed` → Needs review, tagged **Not AI-screened**, with the deterministic product-terms and hidden-text findings recorded. Ask about this ad reports the same reason. Once the card is added nothing else changes.
-- **Without the model, recall is low by design.** `scripts/eval.ts --no-model` over the 20 fixtures: 6 of 24 expected rule codes found (25%), 0 false positives, hidden text 1/1, $0. The deterministic layer covers numbers against product terms and hidden text; judgment rules (approval claims, superlatives, disclosures) need the model. No live-model numbers are published here because no live run has been possible yet.
+- **The gateway's plan decides which models exist.** Anthropic models need paid credits on the team, so Haiku is last in the ladder; the four other rungs are served on every plan. If the gateway refuses every rung, the check still completes with the deterministic findings and the ad is tagged **Not AI-screened**.
+- **Known-answer eval, live (2026-11-07):** `scripts/eval.ts` over the 20 fixtures with the check ladder: recall 83% (20 of 24 expected rule codes), 15 false positives (compliant ads over-flagged for TRIGGER-CLOSED, CARD-TRIGGER and OFFER-MATCH), hidden text 1/1, $0.024 total. Deterministic only (`--no-model`): recall 25%, 0 false positives. The prompt was tuned against Haiku; retuning it for gpt-oss-120b is the cheapest way to cut the false positives.
 - **Outlook and OneDrive are untested end to end.** The adapters exist and share the pipeline with Gmail and Drive, but no Microsoft account has been connected against production.
 - **Cron is daily** (Vercel Hobby). Checks normally run in `after()` right after intake and stale runs are nudged on every Ads list load; the cron is the safety net, so a run lost to a cold start can wait up to a day if nobody opens the list.
 - **No recordings are committed yet.** `AI_MODE=replay` reads `fixtures/recorded/`, which can only be filled by one live run per sample once the gateway serves; until then replay behaves like `off`.

@@ -1,6 +1,6 @@
 # Progress log
 
-Active run: 2026-11-07T06:09Z (local session on Max's laptop; it refreshes this line with every push. Cloud runs: skip while it is less than 50 minutes old)
+Active run: none (final hand-in state, 2026-11-07T15:35Z)
 
 Read `docs/HANDOFF.md` first. Newest entries at the bottom. Keep entries short and factual.
 
@@ -51,3 +51,12 @@ Read `docs/HANDOFF.md` first. Newest entries at the bottom. Keep entries short a
 - AI Gateway key rotated to `promptarmor-demo` ($2/day); still blocked on a credit card. ai_usage shows only $0 released reservations.
 - Cloud routine stays disabled.
 
+## 2026-11-07 09:30 CST — AI live on production; model ladder; caps aligned
+
+- The gateway was refusing Anthropic models on the team's free tier, not the key. The app was pinned to Haiku, so every check ended "Not AI-screened". Fixed by choosing models the gateway serves on every plan and adding a ladder (`lib/ai/ladder.ts`): a refused model or a malformed answer (after one retry) moves to the next rung, and the run records which model answered.
+- Defaults chosen from published instruction-following benchmarks plus a live known-answer eval over the 20 fixtures (3 models, 8 cents total): check = `openai/gpt-oss-120b` (recall 83%, 15 false positives, $0.0012/ad); fallbacks gpt-5-mini (100% / 38 / $0.0022), gemini-2.5-flash-lite (67% / 31), claude-haiku-5.5 (needs paid credits). Transcription and Ask = `openai/gpt-5-nano`.
+- Verified on production: sample chip → 4 Critical issues with verified quotes in 12 s, history shows `gpt-oss-120b · $0.002`; Ask answers "Why was the APR flagged?" correctly. Smoke 44/44 with "issues listed".
+- Gateway key rotated to `promptarmor-demo-5` ($5/day); global DB cap $5/day (migration `ai_caps_align`); workspace default $3/day. Old $2 key `promptarmor-demo` still exists and can be revoked from the dashboard.
+- Arrivals: bounces, calendar traffic, account notices and receipts are never candidates; triage rows say "Could be an ad: has a call to action" instead of signal dumps. The two system-mail rows in ClearPath were reclassified.
+- ClearPath left empty (samples cleared, test ads retired) so the chips show.
+- Design review (six lenses + red team, this morning) and the roadmap it produced are summarized in the README roadmap section; the longer notes are in the session transcript.
