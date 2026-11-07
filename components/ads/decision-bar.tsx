@@ -320,11 +320,13 @@ function ApproveForm({ detail, userId, onClose, onDone }: { detail: AdDetail; us
                 <SeverityWord severity={f.severity} />
               </legend>
               <div className="text-sm font-medium [overflow-wrap:anywhere]">{issueTitle(f)}</div>
-              {f.quote && (
+              {f.imageAnchor ? (
+                <p className="text-sm text-muted-foreground [overflow-wrap:anywhere]">Pinned on the image{f.quote ? `: ${f.quote}` : ""}</p>
+              ) : f.quote ? (
                 <q className="block text-sm text-muted-foreground [overflow-wrap:anywhere] [quotes:'“'_'”']" dir="auto">
                   {f.quote}
                 </q>
-              )}
+              ) : null}
               <div className="grid gap-1.5">
                 <Label htmlFor={`exc-reason-${f.id}`}>Why approve anyway?</Label>
                 <Select value={entries[f.id]?.reason ?? ""} onValueChange={(v) => setEntries((s) => ({ ...s, [f.id]: { ...(s[f.id] ?? { text: "" }), reason: v } }))}>
@@ -373,11 +375,13 @@ function ApproveForm({ detail, userId, onClose, onDone }: { detail: AdDetail; us
                   <li key={f.id} className="flex flex-wrap items-center gap-x-2 text-sm">
                     <SeverityWord severity={f.severity} />
                     <span className="min-w-0">{issueTitle(f)}</span>
-                    {f.quote && (
+                    {f.imageAnchor ? (
+                      <span className="min-w-0 max-w-full text-muted-foreground [overflow-wrap:anywhere]">Pinned on the image{f.quote ? `: ${f.quote}` : ""}</span>
+                    ) : f.quote ? (
                       <q className="min-w-0 max-w-full text-muted-foreground [overflow-wrap:anywhere] [quotes:'“'_'”']" dir="auto">
                         {f.quote}
                       </q>
-                    )}
+                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -442,7 +446,8 @@ function buildNote(detail: AdDetail, open: AdFinding[]): string {
   } else {
     open.forEach((f, i) => {
       lines.push(`${i + 1}. ${issueTitle(f)} (${severityLabel(f.severity)})`);
-      if (f.quote) lines.push(`   Quoted: “${f.quote}”`);
+      if (f.imageAnchor) lines.push(`   Pinned on the image${f.quote ? `: ${f.quote}` : ""}`);
+      else if (f.quote) lines.push(`   Quoted: “${f.quote}”`);
       if (f.rule) lines.push(`   Rule: ${f.rule.title}${f.rule.references[0] ? ` — ${f.rule.references[0].citation}` : ""}`);
       if (f.suggestedFix) lines.push(`   Fix: ${f.suggestedFix}`);
       else if (f.explanation) lines.push(`   Fix: ${f.explanation}`);

@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus } from "lucide-react";
+import { MapPin, Plus } from "lucide-react";
 import { cn } from "cn";
 import { useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
@@ -11,17 +11,25 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { addReviewerIssue } from "@/lib/actions/ads";
-import type { Severity } from "@/lib/types/ads";
+import { MAX_IMAGE_LABEL_CHARS, type Severity } from "@/lib/types/ads";
 
 /**
  * "+ Add issue": a reviewer quotes words the AI missed. The quote comes from
  * a text selection in the ad's text view (see creative-view.tsx); the
  * dialog takes severity, the rule it breaks and why. The server verifies the
  * words are in this version and records a reviewer finding with its author.
+ *
+ * With a `region` (a spot clicked on an image ad) the same dialog adds an
+ * image note instead: a short label in place of the quote, pinned where the
+ * reviewer clicked.
  */
 
 export const MAX_QUOTE_CHARS = 500;
+
+/** Where a pin was dropped: fractions 0..1 of the rendered image. */
+export type PinRegion = { x: number; y: number };
 const MIN_WHY_CHARS = 10;
 const MAX_WHY_CHARS = 1000;
 
@@ -95,6 +103,7 @@ const SEVERITIES: { value: Severity; label: string; hint: string }[] = [
 
 export function AddIssueDialog({ open, onOpenChange, ...form }: AddIssueFormProps & { open: boolean }) {
   const whyRef = useRef<HTMLTextAreaElement>(null);
+  const labelRef = useRef<HTMLInputElement>(null);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
@@ -102,11 +111,11 @@ export function AddIssueDialog({ open, onOpenChange, ...form }: AddIssueFormProp
         onOpenAutoFocus={(e) => {
           // Land on the first thing to type, not the close button.
           e.preventDefault();
-          whyRef.current?.focus();
+          (form.region ? labelRef.current : whyRef.current)?.focus();
         }}
       >
         {/* Mounted only while open, so every opening starts clean with the words that were selected. */}
-        {open && <AddIssueForm {...form} onOpenChange={onOpenChange} whyRef={whyRef} />}
+        {open && <AddIssueForm {...form} onOpenChange={onOpenChange} whyRef={whyRef} labelRef={labelRef} />}
       </DialogContent>
     </Dialog>
   );
@@ -122,6 +131,8 @@ type AddIssueFormProps = {
   quoteEditable: boolean;
   rules: RuleOption[];
   onAdded: (findingId: string) => void;
+  /** Set for an image note: where the pin was dropped. The quote field becomes a short label. */
+  region?: PinRegion | null;
 };
 
 function AddIssueForm({
@@ -132,9 +143,12 @@ function AddIssueForm({
   quoteEditable,
   rules,
   onAdded,
+  region,
   whyRef,
+  labelRef,
 }: AddIssueFormProps & {
   whyRef: React.RefObject<HTMLTextAreaElement | null>;
+  labelRef: React.RefObject<HTMLInputElement | null>;
 }) {
   const [pending, start] = useTransition();
   const [quote, setQuote] = useState(initialQuote);
@@ -143,8 +157,9 @@ function AddIssueForm({
   const [why, setWhy] = useState("");
   const [error, setError] = useState<string | null>(null);
 
+  const pinned = Boolean(region);
   const quoteTrimmed = quote.trim();
-  const quoteTooLong = quoteTrimmed.length > MAX_QUOTE_CHARS;
+  const quoteTooLong = quoteTrimmed.length > (pinned ? MAX_IMAGE_LABEL_CHARS : MAX_QUOTE_CHARS);
   const quoteOk = quoteTrimmed.length > 0 && !quoteTooLong;
   const whyLen = why.trim().length;
   const whyOk = whyLen >= MIN_WHY_CHARS && whyLen <= MAX_WHY_CHARS;
@@ -153,8 +168,12 @@ function AddIssueForm({
   return (
     <>
       <DialogHeader>
-        <DialogTitle>Add an issue</DialogTitle>
-        <DialogDescription>For something the check missed on V{versionNo}. It goes in the audit record with your name and counts at approval time like any other issue.</DialogDescription>
+        <DialogTitle>{pinned ? "Add a note on the image" : "Add an issue"}</DialogTitle>
+        <DialogDescription>
+          {pinned
+            ? `Pinned where you clicked on V${versionNo}. It goes in the audit record with your name and counts at approval time like any other issue.`
+            : `For something the check missed on V${versionNo}. It goes in the audit record with your name and counts at approval time like any other issue.`}
+        </DialogDescription>
       </DialogHeader>
       <form
         className="space-y-3"
@@ -169,19 +188,37 @@ function AddIssueForm({
               severity,
               ruleId: ruleId === "none" ? null : ruleId,
               explanation: why.trim(),
+              region: region ? { x: region.x, y: region.y } : undefined,
             });
             if (!res.ok) {
               setError(res.error);
               return;
             }
-            toast.success("Issue added");
+            toast.success(pinned ? "Note pinned" : "Issue added");
             onOpenChange(false);
             onAdded(res.data.findingId);
           });
         }}
       >
         <div className="grid gap-1.5">
-          {quoteEditable ? (
+          {pinned ? (
+            <>
+              <Label htmlFor="add-issue-label">What is it about?</Label>
+              <Input
+                ref={labelRef}
+                id="add-issue-label"
+                value={quote}
+                onChange={(e) => setQuote(e.target.value)}
+                placeholder="e.g. APR in the footer"
+                aria-describedby="add-issue-label-help"
+                maxLength={MAX_IMAGE_LABEL_CHARS + 40}
+                dir="auto"
+              />
+              <p id="add-issue-label-help" className={cn("text-xs", quoteTooLong ? "text-destructive" : "text-muted-foreground")}>
+                {quoteTooLong ? `Keep the label under ${MAX_IMAGE_LABEL_CHARS} characters; the details go below.` : "A few words naming the spot, so the note reads well in the change request."}
+              </p>
+            </>
+          ) : quoteEditable ? (
             <>
               <Label htmlFor="add-issue-quote">The words</Label>
               <Textarea
@@ -265,7 +302,7 @@ function AddIssueForm({
             id="add-issue-why"
             value={why}
             onChange={(e) => setWhy(e.target.value)}
-            placeholder="What the words claim, what the rule or the product terms say, and what should change."
+            placeholder={pinned ? "What you see there, what the rule or the product terms say, and what should change." : "What the words claim, what the rule or the product terms say, and what should change."}
             className="min-h-24"
             aria-describedby="add-issue-why-count"
             maxLength={MAX_WHY_CHARS + 200}
@@ -287,8 +324,8 @@ function AddIssueForm({
             Cancel
           </Button>
           <Button type="submit" disabled={!canSubmit}>
-            {pending ? <Spinner className="motion-reduce:animate-none" /> : <Plus data-icon="inline-start" />}
-            Add issue
+            {pending ? <Spinner className="motion-reduce:animate-none" /> : pinned ? <MapPin data-icon="inline-start" /> : <Plus data-icon="inline-start" />}
+            {pinned ? "Pin note" : "Add issue"}
           </Button>
         </DialogFooter>
       </form>

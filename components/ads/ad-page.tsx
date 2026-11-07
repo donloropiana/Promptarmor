@@ -80,13 +80,20 @@ export function AdPage({ detail, userId }: { detail: AdDetail; userId: string })
   // For a PDF or image with no text layer: did a model read it as an image?
   const fileRead: "transcribed" | "unread" | "unknown" = detail.checking || !latestRun ? "unknown" : latestRun.status === "complete" && latestRun.transcribed ? "transcribed" : "unread";
   const nothingToCheck = (detail.latest.content.format === "pdf" || detail.latest.content.format === "image") && !detail.latest.extractedText.trim() && fileRead === "unread";
-  const select = useCallback((id: string | null) => {
-    setSelectedId(id);
-    if (id) {
-      setLeftView("current");
-      setCreativeView("text");
-    }
-  }, []);
+  const imageNoteIds = useMemo(() => new Set(detail.findings.filter((f) => f.imageAnchor).map((f) => f.id)), [detail.findings]);
+  // Selecting an issue shows where it is: the Text view for quoted words, the
+  // Preview for a pin on the image. `where` is passed for a just-added issue
+  // the page has not re-rendered with yet.
+  const select = useCallback(
+    (id: string | null, where?: "text" | "image") => {
+      setSelectedId(id);
+      if (id) {
+        setLeftView("current");
+        setCreativeView((where ?? (imageNoteIds.has(id) ? "image" : "text")) === "image" ? "preview" : "text");
+      }
+    },
+    [imageNoteIds],
+  );
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -157,7 +164,7 @@ export function AdPage({ detail, userId }: { detail: AdDetail; userId: string })
           fileRead={fileRead}
           rulesInForce={detail.rulesInForce}
           canAddIssue={!readOnly}
-          onIssueAdded={(id) => select(id)}
+          onIssueAdded={(id, where) => select(id, where)}
         />
       )}
     </div>
@@ -224,7 +231,9 @@ export function AdPage({ detail, userId }: { detail: AdDetail; userId: string })
                   <span className="mt-0.5 shrink-0 rounded-full border px-1.5 text-[11px] font-medium text-foreground">{label}</span>
                   <span className="min-w-0">
                     {issueTitle(f)}
-                    {f.quote ? (
+                    {f.imageAnchor ? (
+                      <> · pinned on the image{f.quote ? `: ${f.quote}` : ""} (look at the new image)</>
+                    ) : f.quote ? (
                       <>
                         {" "}
                         · <q className="[quotes:'“'_'”']">{f.quote}</q>

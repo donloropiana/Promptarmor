@@ -68,6 +68,7 @@ function describeEvent(e: AdEvent, detail: AdDetail): { what: string; detail?: s
     case "finding.added": {
       const sev = typeof d.severity === "string" ? d.severity : "";
       const quote = typeof d.quote === "string" ? d.quote : "";
+      if (d.anchor_type === "image_region") return { what: `Note pinned on the image${sev ? ` (${severityLabel(sev)})` : ""}`, detail: quote || undefined };
       return { what: `Issue added${sev ? ` (${severityLabel(sev)})` : ""}`, detail: quote ? `“${quote}”` : undefined };
     }
     default:
