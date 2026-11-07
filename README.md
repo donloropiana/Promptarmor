@@ -41,11 +41,11 @@ If the AI gateway is not serving requests (see Known limitations), every check s
 
 ### Arrivals
 
-- **Drop, paste, choose a file.** Full-window drop target on the Ads list, a paste box, a file picker. PDF, PNG/JPEG/WebP, HTML and plain text, up to 4 MB through the UI (`src/features/ads/server/actions.ts`). PDFs are text-extracted per page with `unpdf`; HTML is stripped into sections and also kept raw for the sandboxed preview; images and scanned PDFs are transcribed by the model first. Product, channel and title are inferred by cheap heuristics (no model) and shown as editable chips; the check never waits for them.
+- **Drop, paste, choose a file.** Full-window drop target on the Ads list, a paste box, a file picker. PDF, PNG/JPEG/WebP, HTML and plain text, up to 4 MB through the UI (`uploadAd` in `src/features/ads/server/actions/intake.ts`; the limits are in `src/features/ads/server/actions/submission.ts`). PDFs are text-extracted per page with `unpdf`; HTML is stripped into sections and also kept raw for the sandboxed preview; images and scanned PDFs are transcribed by the model first. Product, channel and title are inferred by cheap heuristics (no model) and shown as editable chips; the check never waits for them.
 - **Connected accounts.** Each member clicks **Connect Google** (Gmail + Drive) or **Connect Microsoft** (Outlook + OneDrive) once. OAuth runs through Nango Cloud's managed apps; the app only ever gets a 30-minute connect-session token in the browser and does read-only API calls on the server (`src/lib/nango/server.ts` refuses anything but GET, plus Graph `$batch` whose sub-requests are all GET). A sync pass (`src/features/connections/server/sync.ts`) pages through recent mail and files, hashes bytes and normalized text, classifies each item with a keyword pre-classifier (no model), and inserts `source_items` idempotently. Non-marketing mail is skipped and its text discarded; marketing-looking and unclear items show at the top of the Ads list as **Looks like an ad / Might be an ad** rows, visible only to the member whose account they came from. There is no gate: click the row and it opens as an ad with the check started; the trash can drops it. A changed file already linked to an ad arrives as **New version?**. Exact duplicates merge.
 - **Trash can on every row.** Any ad can be taken off the list in one click (not an ad, duplicate, mistake), with Undo in the toast. Nothing is deleted: the ad is marked withdrawn, the record stays, the arrival it came from is marked declined. Approved ads keep their approval (withdraw it first).
 
-### The check pipeline (`src/features/analysis/server/engine.ts`, `src/features/analysis/server/analyze.ts`)
+### The check pipeline (`src/features/analysis/server/engine/`, `src/features/analysis/server/analyze.ts`)
 
 Inserting a version makes a database trigger queue an `analysis_runs` row. The server claims it right after the request (`after()`), and stale runs are picked up on the next Ads list load or by the daily cron.
 
@@ -125,7 +125,9 @@ cron (daily, Hobby): /api/cron/maintenance (stale syncs, Nango revocations,
                      one sync pass)  /api/cron/analyze (stuck and queued checks)
 ```
 
-- **Next.js 16.4.5**, React 19, TypeScript strict, Tailwind v4, shadcn/ui. Server actions in `lib/actions/*` re-authenticate and confirm membership under RLS before calling intake, the engine or an RPC.
+- **Code layout**: `src/app` only routes; each page calls into a feature and renders its components. Feature code lives in `src/features/<feature>/` (ads, analysis, rules, products, connections, workspaces, auth): `components/` for its UI, `server/` for its Server Actions, reads and secret-key work, and pure modules at the top. Shared UI is in `src/components` (`ui/` for shadcn/ui, `layout/` for the shell); shared infrastructure is in `src/lib` (Supabase, the Nango client, AI models, budget and mode, formatting). The rules that keep it this way are in [docs/architecture.md](docs/architecture.md) section 6.
+- **Next.js 16.4.5**, React 19, TypeScript strict, Tailwind v4, shadcn/ui. Server Actions live in each feature's `server/` folder (ads has one module per user intent in `src/features/ads/server/actions/`). Each one re-authenticates and confirms membership under RLS before calling intake, the engine or an RPC.
+- **The check engine** is `src/features/analysis/server/engine/`: `run.ts` takes one check from claim to persist, `queue.ts` starts and nudges runs, and the stages it calls are in `inputs.ts`, `reuse.ts`, `live.ts`, `findings.ts`, `outcomes.ts` and `records.ts`.
 - **Supabase**: six migrations in `supabase/migrations/`, 27 tables, RLS on every one, 32 policies, 71 functions. The user-context client (`src/lib/supabase/server.ts`) does everything a member may do; the secret-key client (`src/lib/supabase/admin.ts`) is used only for what RLS cannot express (webhooks, the engine, seeding) and always after a membership check.
 - **AI**: `ai` package with gateway model strings; `generateText` with `Output.object` and a Zod schema; 90-second timeout, one retry, well under the 15-minute budget reservation TTL.
 - **Nango**: six integrations (`google-mail`, `google-drive`, `google-sheet`, `outlook`, `one-drive`, `one-drive-personal`); details in [docs/nango.md](docs/nango.md).
@@ -225,21 +227,58 @@ The database is the live Supabase project; migrations in `supabase/migrations/` 
 ## Repo map
 
 ```
-app/
-  (app)/ads, ads/[id], rules, settings/*, new-workspace   the four screens
-  (auth)/signin, reset-password, invite/[token]           chromeless auth pages
-  api/health, api/cron/*, api/nango/webhook, api/connections/*, api/review-session
-components/ads, rules, settings, shell, connections, ui   UI (shadcn/ui under ui/)
-lib/
-  ai/        engine, analyze, prompts, hidden-text, offer-checks, spans, recheck, budget, chat
-  intake/    ads (create, versions, samples, triage), extract, infer, hash
-  connectors/ gmail, google-drive, outlook, onedrive, classify, sync
-  nango/     connect sessions, read-only proxy, webhook helpers
-  actions/   server actions (ads, rules, offers, profiles)
-  data/      read models for the pages
-  seed/      starter rules, ClearPath products, sample ads
-  supabase/  server, admin, context, storage, generated types
-  types/     shared ad/version/finding types
+src/
+  app/                  routing only: pages, layouts, loading states, route handlers
+    (app)/              ads, ads/[id], rules, settings/*, get-started, new-workspace
+    (auth)/             signin, reset-password, invite/[token] (chromeless)
+    api/                health, cron/*, nango/webhook, connections/*, review-session
+    auth/               callback, confirm, signout
+  proxy.ts              session cookies and auth gating
+  components/
+    ui/                 shadcn/ui primitives
+    layout/             app shell, sidebar, page header, settings nav
+    redline.tsx         word-level diff
+  hooks/use-mobile.ts   the sidebar's mobile breakpoint
+  lib/
+    supabase/           server (user-context client), admin (secret-key client), context, storage,
+                        env, generated types
+    nango/              integrations (registry, client-safe), server (connect sessions, read-only
+                        proxy, webhook signature)
+    ai/                 budget (model ids, prices, budget RPCs), ladder (model fallback), mode (AI_MODE)
+    format.ts           dates, money, initials; time-zone.ts keeps server and browser in one zone
+    action-result.ts    the result every Server Action returns
+    display-name.ts     how an author is shown, with the batched users lookup
+    files.ts            stored-file MIME types, bucket limits, Storage-safe filenames
+  features/
+    ads/
+      domain.ts         tabs, statuses, life after approval, channels, ranking, tags (pure, tested)
+      format.ts, types.ts, samples.ts
+      server/actions/   one module per user intent: intake (uploadAd, pasteAd, trySample,
+                        triageSourceItem), review (decide, dispositions, reviewer issues, alerts),
+                        versions, lifecycle, details, remove, ask; shared.ts and submission.ts
+                        hold what they share
+      server/queries/   reads under RLS: list, detail, metrics, next-ad, nudge, shared
+      server/intake.ts  files, text and samples into versions; server/lifecycle.ts the expiry sweep
+      components/list/  the Ads list: rows, triage rows, metrics strip, uploader, empty workspace
+      components/detail/  the ad page:
+        ad-page.tsx + ad-page/          header, columns, creative pane, issue sections, shortcuts
+        decision-bar.tsx + decision/    approve, request changes, reject, lifecycle forms
+        creative-view.tsx + creative/   sandboxed HTML preview, text view, image pins, add issue
+        issues-panel, history, what-changed, ask-box, ship-it, edit-version, ...
+    analysis/           extract, infer, hash, hidden-text, offer-checks, spans, recheck, prompts, schema
+      server/engine/    run, queue, inputs, reuse, live, findings, outcomes, records
+      server/           analyze (the check, no database; scripts/eval.ts runs it), chat (Ask about
+                        this ad), recorded (replay)
+    rules/              severity.ts (pure, tested), labels, starter-rules; components/;
+                        server/ actions, queries
+    products/           catalog.ts (pure, tested), term-fields, starter-products; components/;
+                        server/ actions, queries
+    connections/        classify, content, providers/ (gmail, google-drive, outlook, onedrive, proxy,
+                        registry); components/; server/ sync, connections, queries, route-auth
+    workspaces/         components/ (members, invitations, settings, notifications bell); server/ seed,
+                        create-workspace, actions, settings, queries, notifications
+    auth/               redirect.ts (tested); components/ (sign-in, reset, confirm, account);
+                        server/ dal, signin, confirm, account
 supabase/migrations/   six migrations (schema, RLS, RPCs, storage)
 fixtures/              20 known-answer ads for scripts/eval.ts; recorded/ holds replayable model output
 scripts/               seed-starter, write-fixtures, check-fixtures, eval, record-fixtures, test-hidden-text,

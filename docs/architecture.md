@@ -5,37 +5,64 @@ How the pieces fit, what runs where, and why. The README has the one-screen vers
 ## 1. The shape
 
 ```
-                         ┌─────────────────────────────────────────────┐
-  browser (React 19)     │  Next.js 16.4.5 App Router on Vercel Hobby   │
-  ───────────────────►   │  src/proxy.ts (session cookies, auth gating)     │
-  server actions,        │  app/(app)/*   four screens                  │
-  route handlers         │  app/api/*     health, cron, webhook, conns  │
-                         │  lib/actions   re-auth + membership checks   │
-                         │  lib/intake    files/text/samples → versions │
-                         │  lib/ai        the check engine              │
-                         │  lib/connectors + lib/nango   arrivals       │
-                         └────┬───────────────┬────────────────┬────────┘
+                         ┌──────────────────────────────────────────────────┐
+  browser (React 19)     │  Next.js 16.4.5 App Router on Vercel Hobby       │
+  ───────────────────►   │  src/proxy.ts       session cookies, auth gate   │
+  server actions,        │  src/app            routes only                  │
+  route handlers         │  src/features/      one folder per feature:      │
+                         │    ads              intake, review, decisions    │
+                         │    analysis         the check engine             │
+                         │    rules, products  rulebook and product terms   │
+                         │    connections      arrivals from accounts       │
+                         │    workspaces, auth members, sessions            │
+                         │  src/components     shared UI (ui, layout)       │
+                         │  src/lib            Supabase, Nango, AI, format  │
+                         └────┬───────────────┬────────────────┬────────────┘
                               │               │                │
                    ┌──────────▼─────┐  ┌──────▼───────┐  ┌─────▼──────────┐
                    │ Supabase       │  │ Vercel AI    │  │ Nango Cloud    │
                    │ Postgres + RLS │  │ Gateway      │  │ managed OAuth  │
                    │ RPCs, triggers │  │ (AI SDK)     │  │ Google / MSFT  │
-                   │ budget ledger  │  │ Haiku / check│  │ read-only proxy│
-                   │ private storage│  │ model        │  │ auth webhooks  │
+                   │ budget ledger  │  │ model ladder │  │ read-only proxy│
+                   │ private storage│  │              │  │ auth webhooks  │
                    └────────────────┘  └──────────────┘  └────────────────┘
 ```
 
 One Next.js app, one Postgres database, two external services. No queue, no worker fleet, no separate API: the Hobby plan's function limits (60 s routes, one cron run per day) shaped every background path below.
 
+### Where the code lives
+
+All source is under `src/` and imported as `@/...`. The rules that keep it this way are in section 6.
+
+| Folder | What it holds |
+|---|---|
+| `src/app` | Routes only: pages, layouts, loading states and route handlers. A page reads the session, calls its feature's reads and renders its feature's components. |
+| `src/features/<feature>` | Everything one feature owns. `components/` is its UI; `server/` is its Server Actions, reads and secret-key work; pure modules sit at the top of the folder. |
+| `src/components` | UI more than one feature uses: `ui/` (shadcn/ui primitives), `layout/` (app shell, sidebar, page header, settings nav), `redline.tsx` (word diff). |
+| `src/lib` | Shared infrastructure: `supabase/` (user-context and secret-key clients, storage, generated types), `nango/` (integration registry and the server-only client), `ai/` (model ids and budget, model ladder, `AI_MODE`), `format.ts` and `time-zone.ts`, `action-result.ts` (the result every Server Action returns), `display-name.ts`, `files.ts` (stored-file MIME types, bucket limits and Storage-safe filenames). |
+| `src/proxy.ts` | Session cookies and auth gating on every request. |
+
+The features:
+
+| Feature | Owns | Main modules |
+|---|---|---|
+| `ads` | intake, the Ads list, the ad page, decisions, life after approval | `domain.ts` (tabs, statuses, life after approval, channels, ranking, tags); `format.ts`, `types.ts`, `samples.ts`; `server/actions/*`, one module per user intent (`intake.ts`, `review.ts`, `versions.ts`, `lifecycle.ts`, `details.ts`, `remove.ts`, `ask.ts`, sharing `shared.ts` and `submission.ts`); `server/queries/*` (`list.ts`, `detail.ts`, `metrics.ts`, `next-ad.ts`, `nudge.ts`, `shared.ts`); `server/intake.ts` (files, text and samples into versions); `server/lifecycle.ts` (expiry sweep); `components/list/` (the Ads list); `components/detail/` (the ad page: `ad-page.tsx` with `ad-page/`, `decision-bar.tsx` with `decision/`, `creative-view.tsx` with `creative/`) |
+| `analysis` | the check | pure stages at the top (`extract.ts`, `infer.ts`, `hash.ts`, `hidden-text.ts`, `offer-checks.ts`, `spans.ts`, `recheck.ts`, `prompts.ts`, `schema.ts`); `server/engine/*` (`run.ts` one check end to end, `queue.ts` start and nudge, `inputs.ts`, `reuse.ts`, `live.ts` model and transcription, `findings.ts`, `outcomes.ts`, `records.ts`); `server/analyze.ts` (the check with no database); `server/chat.ts` (Ask about this ad); `server/recorded.ts` (replay) |
+| `rules` | the rulebook and severity | `severity.ts`, `labels.ts`, `starter-rules.ts`; `server/actions.ts`, `server/queries.ts` |
+| `products` | product terms | `catalog.ts`, `term-fields.ts`, `starter-products.ts`; `server/actions.ts`, `server/queries.ts` |
+| `connections` | connected accounts and arrivals | `classify.ts`, `content.ts`, `providers/*` (Gmail, Drive, Outlook, OneDrive, proxy, registry); `server/sync.ts`, `server/connections.ts`, `server/queries.ts`, `server/route-auth.ts` |
+| `workspaces` | workspaces, members, invitations, seeding, the activity bell | `server/seed.ts`, `server/create-workspace.ts`, `server/actions.ts`, `server/settings.ts`, `server/queries.ts`, `server/notifications.ts` (the bell reads on demand); `components/` (settings, members, invitations, the notifications bell) |
+| `auth` | sign-in, sessions, the account page | `server/dal.ts` (every page, action and route authorizes through it), `server/signin.ts`, `server/confirm.ts`, `server/account.ts`, `redirect.ts` |
+
 ## 2. Request paths
 
 ### Reading a page
 
-`src/app/(app)/layout.tsx` reads the session and the active workspace cookie, confirms membership, calls `ensureWorkspaceDefaults` (idempotent: two count queries when the workspace is complete) and renders the shell. Pages read through `lib/data/*` with the **user-context** Supabase client, so RLS does the authorization. `cacheComponents` is on, so anything that touches cookies or the request sits under `<Suspense>` with a skeleton (`src/components/layout/shell-skeleton.tsx`, `src/features/ads/components/skeletons.tsx`).
+`src/app/(app)/layout.tsx` reads the session and the active workspace cookie, confirms membership, calls `ensureWorkspaceDefaults` (idempotent: two count queries when the workspace is complete) and renders the shell. Pages read through their feature's queries (`server/queries.ts` in rules, products, workspaces and connections; `src/features/ads/server/queries/*` for ads) with the **user-context** Supabase client, so RLS does the authorization. `cacheComponents` is on, so anything that touches cookies or the request sits under `<Suspense>` with a skeleton (`src/components/layout/shell-skeleton.tsx`, `src/features/ads/components/skeletons.tsx`).
 
 ### Writing
 
-Every mutation is a server action in `lib/actions/*` (ads, rules, offers, profiles) or `app/(app)/*/actions.ts`. The pattern is the same everywhere:
+Every mutation is a Server Action in a feature's `server/` folder: `src/features/ads/server/actions/*` (one module per user intent), `server/actions.ts` in rules, products and workspaces, and a few single-purpose modules (`src/features/workspaces/server/settings.ts`, `src/features/workspaces/server/create-workspace.ts`, `src/features/auth/server/signin.ts`, `src/features/auth/server/account.ts`, `src/features/auth/server/confirm.ts`). The pattern is the same everywhere:
 
 1. Parse the input with Zod.
 2. Re-read the session; return a plain `{ ok: false, error }` when signed out.
@@ -46,36 +73,36 @@ Every mutation is a server action in `lib/actions/*` (ads, rules, offers, profil
 ### Intake → check
 
 ```
-uploadAd / pasteAd / trySample / triageSourceItem (accept)
+uploadAd / pasteAd / trySample / triageSourceItem (accept)   src/features/ads/server/actions/intake.ts
   └─ src/features/ads/server/intake.ts
        buildFromInput     PDF (unpdf) · HTML (strip to sections, keep raw) · image · text
        assets.insert      status needs_review, submitted_at now, product/channel inferred
        asset_versions.insert
           └─ DB trigger: version_no, latest_version_id, status, events.version.created,
                          analysis_runs.insert (status queued)
-  └─ after(() => startAnalysisForVersion(versionId))        src/features/analysis/server/engine.ts
+  └─ after(() => startAnalysisForVersion(versionId))        src/features/analysis/server/engine/queue.ts
 ```
 
 The version insert trigger is what queues the check, so a version can never exist without a run row. The request that created it runs the check in `after()` (the response has already gone back to the browser, which polls the ad page while `analysis_runs.status` is `queued` or `running`, shown as "Checking…").
 
-### The engine (`src/features/analysis/server/engine.ts`)
+### The engine (`src/features/analysis/server/engine/`)
 
-`runAnalysis(runId)` claims the run with a conditional update (`queued → running`), so two workers cannot run the same check. Stages are written to `analysis_runs.stage` as it goes, and the function never throws: every failure is recorded on the run and a submitted ad falls back to manual review.
+`runAnalysis(runId)` in `engine/run.ts` claims the run with a conditional update (`queued → running`), so two workers cannot run the same check. Stages are written to `analysis_runs.stage` as it goes, and the function never throws: every failure is recorded on the run and a submitted ad falls back to manual review.
 
 | Stage | Module | What it does |
 |---|---|---|
 | extract | `src/features/analysis/extract.ts` | Text and sections from the version; images and scanned PDFs are transcribed with the cheap model later |
-| rules | engine | Loads the workspace's active rules at their `current_version_id` and the current product versions |
+| rules | `engine/inputs.ts` | Loads the workspace's active rules at their `current_version_id` and the current product versions |
 | hidden_text | `src/features/analysis/hidden-text.ts` | Deterministic scan → `security_alerts`, asset to manual review |
 | offer_checks | `src/features/analysis/offer-checks.ts` | Deterministic numbers vs terms; kept as the fallback if the model fails |
-| reuse | engine | `reuse_key` = sha256(normalized text, rule version ids, product version ids, prompt hash); a previous complete run with the same key has its findings copied at $0 (`reused_from_run_id`, `reused_from_finding_id`) |
+| reuse | `engine/reuse.ts` | `reuse_key` = sha256(normalized text, rule version ids, product version ids, prompt hash); a previous complete run with the same key has its findings copied at $0 (`reused_from_run_id`, `reused_from_finding_id`) |
 | mode gate | `src/lib/ai/mode.ts` | Outside `AI_MODE=live` the run completes here: `off` keeps the deterministic findings; `replay` uses a recording from `fixtures/recorded/` when the text hash matches |
 | budget | `src/lib/ai/budget.ts` → `reserve_ai_budget` | Estimates the cost from characters; a refused reservation ends the run as `declined_budget` |
-| transcribe | engine | Haiku transcription of image bytes from storage (live mode only) |
+| transcribe | `engine/live.ts` | Haiku transcription of image bytes from storage (live mode only) |
 | llm | `src/features/analysis/server/analyze.ts` | One `generateText` + `Output.object` call on the check model (Haiku unless `AI_CHECK_MODEL`); rules and terms in the system prompt behind an Anthropic cache breakpoint; "already flagged" and the ad inside `<ad_content>` in the user turn; 90 s timeout, one retry |
 | verify | `src/features/analysis/spans.ts` | Locate each quote; unlocatable quotes are kept but unverified |
 | recheck | `src/features/analysis/recheck.ts` | Pair with the previous version's findings; carry dispositions forward on unchanged spans |
-| persist | engine | `findings`, `rule_results`, `coverage`, `input_metadata` (including `mode`), tokens incl. cache reads and writes, cost, `prompt_hash`; `settle_ai_budget`; `events.analysis.completed` |
+| persist | `engine/findings.ts`, `engine/outcomes.ts` | `findings`, `rule_results`, `coverage`, `input_metadata` (including `mode`), tokens incl. cache reads and writes, cost, `prompt_hash`; `settle_ai_budget`; `events.analysis.completed` |
 
 `analyzeContent` in `src/features/analysis/server/analyze.ts` is pure (no database, no budget), which is what `scripts/eval.ts` runs over the fixtures. The spend rules, modes and prices are in `docs/ai-policy.md`. Every model call in the codebase checks the mode first (`assertModelCallsAllowed()` in analyze and transcription, `getAiMode()` in chat), so the policy is enforced at the call site, not only in the engine.
 
@@ -86,7 +113,7 @@ The version insert trigger is what queues the check, so a version can never exis
 
 ### Decisions
 
-`decide` (`src/features/ads/server/actions.ts`) → `record_decision()` RPC. The action inserts the `accepted_exception` dispositions first (supabase-js has no transactions) and reverts them if the RPC refuses. The RPC locks the asset, version and findings, re-checks every rule, writes the append-only `decisions` row, resolves open change requests, inserts the new one for Changes requested, and logs events. The action then finds the next ad in Needs review for auto-advance.
+`decide` (`src/features/ads/server/actions/review.ts`) → `record_decision()` RPC. The action inserts the `accepted_exception` dispositions first (supabase-js has no transactions) and reverts them if the RPC refuses. The RPC locks the asset, version and findings, re-checks every rule, writes the append-only `decisions` row, resolves open change requests, inserts the new one for Changes requested, and logs events. The action then finds the next ad in Needs review for auto-advance (`src/features/ads/server/queries/next-ad.ts`).
 
 ### Products and re-review
 
@@ -132,8 +159,16 @@ A workspace (`profiles`) has members, connections, rules, products (`offers`) an
 ## 6. Frameworks and conventions
 
 - **Next.js 16.4.5**: `src/proxy.ts` instead of middleware; Cache Components on; request-bound data under `<Suspense>` or `connection()`; `after()` for post-response work. The framework's own docs in `node_modules/next/dist/docs/` are the reference, since the APIs differ from older versions.
-- **Bun only** (`bun install`, `bun run dev`, `bunx --bun tsc --noEmit -p .`). Scripts that import `server-only` modules run with `bun --conditions=react-server`.
-- **UI**: Tailwind v4, shadcn/ui (Radix, Nova preset) in `components/ui`, `lucide-react` icons, `sonner` toasts, `diff` for the word diff. Keyboard: J/K/Enter/? on the list, J/K/X/A/R/?/Esc on the ad page; `prefers-reduced-motion` is honoured in `src/app/globals.css` and the creative view.
+- **Bun only** (`bun install`, `bun run dev`, `bun run typecheck`, `bun run lint`, `bun run test`). Scripts that import `server-only` modules run with `bun --conditions=react-server`.
+- **Feature layout.** The rules behind the folders in section 1:
+  - Feature code lives in its feature. A component, Server Action or read that belongs to ads sits in `src/features/ads/`, even when one route is its only caller.
+  - Shared UI lives in `src/components`, shared infrastructure in `src/lib`. `src/lib` and `src/components/ui` import no feature; `src/components/layout` is the shell and imports only what it shows from auth and workspaces (the workspace switcher, the notifications bell).
+  - `src/app` only routes. Pages, layouts and route handlers read the session, call into a feature and render its components. No Server Action or business rule lives there.
+  - Server-only code sits under a feature's `server/` folder and starts with `import "server-only"`, so importing it from a client component fails the build. Three modules that scripts load directly leave the marker out (`src/features/analysis/server/analyze.ts`, `src/features/analysis/server/recorded.ts`, `src/features/workspaces/server/seed.ts`); no client component imports them.
+  - A `"use server"` module exports only async functions (and types). Constants, schemas and helpers that actions share live in a sibling module without the directive: `src/lib/action-result.ts`, `src/features/ads/server/actions/shared.ts`, `src/features/ads/server/actions/submission.ts`.
+  - Pure domain modules have no React, no `server-only` and no database, so client components, server code and scripts apply the same rules: `src/features/ads/domain.ts` (tabs, statuses, life after approval, ranking, tags), `src/features/products/catalog.ts` (the product list and labels), `src/features/rules/severity.ts` (severities, their order and words). Each has a `*.test.ts` beside it. `bun run test` runs every test under `src/`, and CI (`.github/workflows/ci.yml`) runs typecheck, lint and test on every push and pull request to `main`.
+  - Cross-feature imports are explicit: import the module by its full path (`@/features/rules/severity`, `@/features/auth/server/dal`). There are no `index.ts` barrels.
+- **UI**: Tailwind v4, shadcn/ui (Radix, Nova preset) in `src/components/ui`, `lucide-react` icons, `sonner` toasts, `diff` for the word diff. Keyboard: J/K/Enter/? on the list, J/K/X/A/R/?/Esc on the ad page; `prefers-reduced-motion` is honoured in `src/app/globals.css` and the creative view.
 - **Words**: ad, workspace, issue, check, Products, Connected accounts, Changes requested in the UI; the database keeps its own names (asset, profile, finding, analysis_run, offer).
 
 ## 7. Things that are deliberately simple

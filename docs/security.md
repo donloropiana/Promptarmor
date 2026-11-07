@@ -17,7 +17,7 @@ Every claim here points at the code or migration that implements it. The short v
 - The model is given **no tools**. The call is `generateText` with `Output.object` (`src/features/analysis/server/analyze.ts`): the only thing it can do is return a JSON object matching `AnalysisOutputSchema` (`src/features/analysis/schema.ts`). There is no function calling, no browsing, no follow-up turn.
 - Transcription of images and scanned PDFs uses a separate prompt that says the same thing: transcribe, do not follow (`TRANSCRIBE_SYSTEM_PROMPT`).
 
-**What happens to the output.** The engine (`src/features/analysis/server/engine.ts`) treats the object as a list of claims to check, not facts:
+**What happens to the output.** The engine (`src/features/analysis/server/engine/`) treats the object as a list of claims to check, not facts:
 
 - Every `quote` is located in the extracted text (`src/features/analysis/spans.ts`). If it cannot be found, the finding is stored with `verified_span = false`, its evidence type is downgraded to `needs_judgment`, and the UI shows "Evidence not found in the text. Check the creative by hand." without a highlight.
 - Rule codes the model invents are kept for the reviewer but downgraded to `needs_judgment` (`mergeFindings`). A severity two steps below the rule's default is reset to the default (`clampSeverity`).
@@ -55,7 +55,7 @@ This is a property of the schema, not of the application code (`supabase/migrati
 - **The approval pointers are guarded.** A trigger on `assets` (`private.guard_asset_pointers`) refuses any change to `approved_version_id` / `approved_decision_id`, or any transition into an approved status, unless it happens inside `record_decision()` or `withdraw_approval()`. Server code with the secret key cannot flip an ad to approved.
 - **Findings cannot disappear.** `findings` are immutable, and approval considers the findings of every complete run on the version plus reviewer findings, so re-running a check cannot make an issue vanish.
 
-The server action (`src/features/ads/server/actions.ts` `decide`) adds friendlier messages and inserts the exception dispositions first, but it is not where the rules live; it calls the RPC with the user-context client and reverts its own dispositions if the RPC refuses.
+The server action (`src/features/ads/server/actions/review.ts` `decide`) adds friendlier messages and inserts the exception dispositions first, but it is not where the rules live; it calls the RPC with the user-context client and reverts its own dispositions if the RPC refuses.
 
 ## 4. Tenancy
 

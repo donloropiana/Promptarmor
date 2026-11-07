@@ -3,7 +3,7 @@ import type { NextConfig } from "next";
 /**
  * Response headers for every route. The creative preview renders untrusted
  * HTML only inside a sandboxed srcdoc iframe with its own CSP
- * (src/features/ads/components/detail/creative-view.tsx); these headers protect the app pages
+ * (src/features/ads/components/detail/creative/html-preview.tsx); these headers protect the app pages
  * themselves: no framing by other sites (clickjacking), no MIME sniffing of
  * responses, a referrer that never leaks ad ids to the sites an ad links to,
  * and no plugins or <base> hijacking. Vercel adds Strict-Transport-Security.
@@ -20,7 +20,7 @@ const nextConfig: NextConfig = {
   /* config options here */
   experimental: {
     agentFeedback: true,
-    // Uploads go through a Server Action (src/features/ads/server/actions.ts uploadAd); the
+    // Uploads go through a Server Action (uploadAd in src/features/ads/server/actions/intake.ts); the
     // default 1 MB body limit would refuse a 2 MB PDF before our own 4 MB
     // check ran. Vercel caps request bodies at 4.5 MB.
     serverActions: {
