@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { AdDecision, AdDetail, AdEvent, AdRun } from "@/lib/data/ads";
 
-import { formatDuration, formatUsd, productLabel, severityLabel, shortSha, statusWord } from "./format";
+import { formatDate, formatDuration, formatUsd, liveChannelLabel, productLabel, severityLabel, shortSha, statusWord } from "./format";
 import { LocalDateTime, useLocalDateTime } from "./local-time";
 
 type Entry = { id: string; at: string; who: string | null; what: string; detail?: string; decision?: AdDecision; run?: AdRun };
@@ -28,7 +28,8 @@ function describeEvent(e: AdEvent, detail: AdDetail): { what: string; detail?: s
     }
     case "asset.status_changed": {
       const to = typeof d.to === "string" ? d.to : typeof d.new === "string" ? d.new : null;
-      return to ? { what: `Status: ${statusWord(to)}${to === "re_review_due" ? " (rates changed)" : to === "needs_manual_review" ? " (a person must decide)" : ""}` } : null;
+      const why = to === "re_review_due" ? (detail.reReviewReason?.kind === "expired" ? " (approval expired)" : " (rates changed)") : to === "needs_manual_review" ? " (a person must decide)" : "";
+      return to ? { what: `Status: ${statusWord(to)}${why}` } : null;
     }
     case "asset.metadata_updated": {
       const changed = d.changed && typeof d.changed === "object" ? (d.changed as Record<string, [unknown, unknown]>) : {};
@@ -49,6 +50,21 @@ function describeEvent(e: AdEvent, detail: AdDetail): { what: string; detail?: s
       return { what: "Accepted as an ad from a connected account" };
     case "triage.declined":
       return { what: "Marked as not an ad" };
+    case "asset.marked_live": {
+      const where = liveChannelLabel(typeof d.live_channel === "string" ? d.live_channel : null);
+      const from = typeof d.live_at === "string" ? `from ${formatDate(d.live_at)}` : "";
+      const ends = typeof d.expires_at === "string" ? ` · ends ${formatDate(d.expires_at)}` : "";
+      const link = typeof d.live_url === "string" && d.live_url ? ` · ${d.live_url}` : "";
+      return { what: `Marked live${where ? ` on ${where}` : ""}`, detail: `${from}${ends}${link}`.trim() || undefined };
+    }
+    case "asset.expiry_set":
+      return { what: typeof d.expires_at === "string" ? `End date set to ${formatDate(d.expires_at)}` : "End date cleared" };
+    case "asset.expired":
+      return { what: "Approval expired", detail: typeof d.expires_at === "string" ? `End date ${formatDate(d.expires_at)} passed; back to Needs review` : "Back to Needs review" };
+    case "asset.archived":
+      return { what: "Archived", detail: typeof d.reason === "string" ? d.reason : undefined };
+    case "asset.unarchived":
+      return { what: "Unarchived" };
     case "finding.added": {
       const sev = typeof d.severity === "string" ? d.severity : "";
       const quote = typeof d.quote === "string" ? d.quote : "";

@@ -1,4 +1,4 @@
-import { Check, CircleDashed, MessageSquareWarning, Undo2, XCircle } from "lucide-react";
+import { Archive, Check, CircleDashed, MessageSquareWarning, Radio, Undo2, XCircle } from "lucide-react";
 import { cn } from "cn";
 
 import { Badge } from "@/components/ui/badge";
@@ -13,10 +13,16 @@ const STATUS_ICON = {
   Rejected: XCircle,
   Withdrawn: Undo2,
   Draft: CircleDashed,
+  Live: Radio,
+  Archived: Archive,
 } as const;
 
-/** Status word with an icon (never colour alone). "Checking…" is a spinner, not a status. */
-export function StatusWord({ status, checking, className }: { status: string; checking?: boolean; className?: string }) {
+/**
+ * Status word with an icon (never colour alone). "Checking…" is a spinner,
+ * not a status. `live` and `archived` are the lifecycle after approval
+ * (derived from the live/archive columns; the status itself is unchanged).
+ */
+export function StatusWord({ status, checking, live, archived, className }: { status: string; checking?: boolean; live?: boolean; archived?: boolean; className?: string }) {
   if (checking) {
     return (
       <span className={cn("inline-flex items-center gap-1.5 text-xs text-muted-foreground", className)}>
@@ -25,7 +31,7 @@ export function StatusWord({ status, checking, className }: { status: string; ch
       </span>
     );
   }
-  const word = statusWord(status);
+  const word: keyof typeof STATUS_ICON = archived ? "Archived" : live ? "Live" : statusWord(status);
   const Icon = STATUS_ICON[word];
   return (
     <span className={cn("inline-flex items-center gap-1.5 text-xs font-medium text-foreground", className)}>
@@ -35,7 +41,7 @@ export function StatusWord({ status, checking, className }: { status: string; ch
   );
 }
 
-/** Small neutral reason tags: New, V2, Rates changed, Hidden text, With exceptions… */
+/** Small neutral reason tags: New, V2, Rates changed, Expired, Hidden text, With exceptions… */
 export function ReasonTags({ tags, className }: { tags: string[]; className?: string }) {
   if (tags.length === 0) return null;
   return (

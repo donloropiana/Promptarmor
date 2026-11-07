@@ -6,12 +6,13 @@ import { after } from "next/server";
 import {
   LIST_CAP,
   APPROVED_STATUSES,
+  EMPTY_COUNTS,
   NEEDS_REVIEW_STATUSES,
   SEVERITY_ORDER,
   asProduct,
   asSeverity,
   providerName,
-  tabForStatus,
+  tabForAsset,
   type Tab,
 } from "@/components/ads/format";
 import { locateQuote } from "@/lib/ai/spans";
@@ -71,6 +72,13 @@ export type AdListRow = {
   withExceptions: boolean;
   /** Exceptions recorded on the standing approval (0 when none or not approved). */
   exceptionCount: number;
+  /** Life after approval (see components/ads/format.ts isLive / lifecycleLine). */
+  liveAt: string | null;
+  liveChannel: string | null;
+  liveUrl: string | null;
+  expiresAt: string | null;
+  archivedAt: string | null;
+  archiveReason: string | null;
   submittedAt: string;
   updatedAt: string;
   isSample: boolean;
@@ -196,6 +204,43 @@ async function signUrl(db: Db, path: string | null, download = false): Promise<s
   return data.signedUrl;
 }
 
+export type LifecycleRow = {
+  live_at: string | null;
+  live_channel: string | null;
+  live_url: string | null;
+  expires_at: string | null;
+  archived_at: string | null;
+  archive_reason: string | null;
+};
+const NO_LIFECYCLE: LifecycleRow = { live_at: null, live_channel: null, live_url: null, expires_at: null, archived_at: null, archive_reason: null };
+
+/**
+ * Live/expiry/archive columns for a set of ads. Read on its own so a database
+ * that has not run the lifecycle migration yet (undefined column, 42703)
+ * degrades to "nothing live, nothing archived" instead of breaking the list.
+ */
+async function loadLifecycle(db: Db, profileId: string, assetIds: string[]): Promise<Map<string, LifecycleRow>> {
+  const map = new Map<string, LifecycleRow>();
+  if (assetIds.length === 0) return map;
+  const { data, error } = await db
+    .from("assets")
+    .select("id, live_at, live_channel, live_url, expires_at, archived_at, archive_reason")
+    .eq("profile_id", profileId)
+    .in("id", assetIds);
+  if (error) {
+    if (error.code !== "42703") console.error("[ads] lifecycle read failed:", error.code, error.message);
+    return map;
+  }
+  for (const r of data ?? []) map.set(r.id, r);
+  return map;
+}
+
+/** Why an approved ad is back in Needs review: the product terms changed, or its end date passed. */
+export function reReviewTag(reason: Json | Record<string, unknown> | null | undefined): "Rates changed" | "Expired" {
+  const kind = reason && typeof reason === "object" && !Array.isArray(reason) ? (reason as Record<string, unknown>).kind : null;
+  return kind === "expired" ? "Expired" : "Rates changed";
+}
+
 function tagsFor(input: {
   status: string;
   versionNo: number;
@@ -204,11 +249,12 @@ function tagsFor(input: {
   changedAfterApproval: boolean;
   notScreened: boolean;
   isSample: boolean;
+  reReviewReason: Json | null;
 }): string[] {
   const tags: string[] = [];
   if (input.isSample) tags.push("Sample");
   if (input.hiddenText) tags.push("Hidden text");
-  if (input.status === "re_review_due") tags.push("Rates changed");
+  if (input.status === "re_review_due") tags.push(reReviewTag(input.reReviewReason));
   if (input.status === "approved_with_exceptions") tags.push("With exceptions");
   if (input.changedAfterApproval) tags.push("Changed after approval");
   if (input.notScreened) tags.push("Not AI-screened");
@@ -231,7 +277,7 @@ export async function listAds(profileId: string, userId: string): Promise<AdsLis
 export async function listAdsWith(db: Db, profileId: string, userId: string): Promise<AdsListData> {
   const empty: AdsListData = {
     rows: [],
-    counts: { needs_review: 0, changes_requested: 0, approved: 0, all: 0 },
+    counts: { ...EMPTY_COUNTS },
     anyChecking: false,
     totalAds: 0,
     truncated: false,
@@ -280,7 +326,7 @@ export async function listAdsWith(db: Db, profileId: string, userId: string): Pr
   const assetIds = visibleQueue.map((q) => q.asset_id!);
 
   type VersionLite = { id: string; asset_id: string; format: string | null; storage_path: string | null; author_id: string | null };
-  const [versionsRes, findingsRes, sourcesRes, decisionsRes, noTextRes] = await Promise.all([
+  const [versionsRes, findingsRes, sourcesRes, decisionsRes, noTextRes, lifecycle] = await Promise.all([
     // Only the fields the row needs: `content` can hold 60 KB of text or HTML
     // per version and the list never shows it.
     latestVersionIds.length
@@ -311,6 +357,7 @@ export async function listAdsWith(db: Db, profileId: string, userId: string): Pr
     latestVersionIds.length
       ? db.from("asset_versions").select("id").in("id", latestVersionIds).is("extracted_text", null)
       : Promise.resolve({ data: [] as { id: string }[] }),
+    loadLifecycle(db, profileId, assetIds),
   ]);
 
   const versions = new Map((versionsRes.data ?? []).map((v) => [v.id, v]));
@@ -436,6 +483,7 @@ export async function listAdsWith(db: Db, profileId: string, userId: string): Pr
     const version = versions.get(q.latest_version_id!);
     const content = contentOf(version ? { format: version.format } : null);
     const status = q.status ?? "needs_review";
+    const life = lifecycle.get(q.asset_id!) ?? NO_LIFECYCLE;
     const isSample = meta?.audience === "sample";
     const hiddenText = (q.open_alert_count ?? 0) > 0;
     const checking = q.analysis_status === "queued" || q.analysis_status === "running";
@@ -503,7 +551,7 @@ export async function listAdsWith(db: Db, profileId: string, userId: string): Pr
       product: asProduct(q.product),
       channel: q.channel,
       status,
-      tab: tabForStatus(status),
+      tab: tabForAsset({ status, liveAt: life.live_at, expiresAt: life.expires_at, archivedAt: life.archived_at }),
       tags: tagsFor({
         status,
         versionNo: q.latest_version_no ?? 1,
@@ -512,6 +560,7 @@ export async function listAdsWith(db: Db, profileId: string, userId: string): Pr
         changedAfterApproval: Boolean(q.changed_after_approval),
         notScreened,
         isSample,
+        reReviewReason: q.re_review_reason,
       }),
       checking,
       checkStage: q.analysis_stage,
@@ -530,6 +579,12 @@ export async function listAdsWith(db: Db, profileId: string, userId: string): Pr
       approvedAt: approval?.created_at ?? null,
       withExceptions: status === "approved_with_exceptions",
       exceptionCount: Array.isArray(approval?.exceptions) ? approval.exceptions.length : 0,
+      liveAt: life.live_at,
+      liveChannel: life.live_channel,
+      liveUrl: life.live_url,
+      expiresAt: life.expires_at,
+      archivedAt: life.archived_at,
+      archiveReason: life.archive_reason,
       submittedAt,
       updatedAt: q.updated_at ?? submittedAt,
       isSample,
@@ -540,7 +595,7 @@ export async function listAdsWith(db: Db, profileId: string, userId: string): Pr
 
   rows.sort((a, b) => a.rank - b.rank);
 
-  const counts: Record<Tab, number> = { needs_review: 0, changes_requested: 0, approved: 0, all: 0 };
+  const counts: Record<Tab, number> = { ...EMPTY_COUNTS };
   for (const r of rows) {
     if (r.isSample) continue;
     counts.all += 1;
@@ -868,6 +923,13 @@ export type AdDetail = {
   approvedDecisionId: string | null;
   changedAfterApproval: boolean;
   reReviewReason: Record<string, unknown> | null;
+  /** Life after approval; null until the ad is marked live / archived. */
+  liveAt: string | null;
+  liveChannel: string | null;
+  liveUrl: string | null;
+  expiresAt: string | null;
+  archivedAt: string | null;
+  archiveReason: string | null;
   versions: AdVersion[];
   latest: AdVersion;
   previous: AdVersion | null;
@@ -1240,6 +1302,13 @@ export async function getAdDetailWith(db: Db, assetId: string, profileId: string
       asset.re_review_reason && typeof asset.re_review_reason === "object" && !Array.isArray(asset.re_review_reason)
         ? (asset.re_review_reason as Record<string, unknown>)
         : null,
+    // select("*") simply lacks these before the lifecycle migration runs.
+    liveAt: asset.live_at ?? null,
+    liveChannel: asset.live_channel ?? null,
+    liveUrl: asset.live_url ?? null,
+    expiresAt: asset.expires_at ?? null,
+    archivedAt: asset.archived_at ?? null,
+    archiveReason: asset.archive_reason ?? null,
     versions,
     latest,
     previous,

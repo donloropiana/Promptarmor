@@ -7,7 +7,7 @@ import { APP_TIME_ZONE } from "@/lib/time-zone";
 
 import type { Product, Severity } from "@/lib/types/ads";
 
-export type Tab = "needs_review" | "changes_requested" | "approved" | "all";
+export type Tab = "needs_review" | "changes_requested" | "approved" | "live" | "archived" | "all";
 
 /** Most ads one list read loads (newest first); the list says so when the cap is hit. */
 export const LIST_CAP = 500;
@@ -16,8 +16,12 @@ export const TABS: { key: Tab; label: string }[] = [
   { key: "needs_review", label: "Needs review" },
   { key: "changes_requested", label: "Changes requested" },
   { key: "approved", label: "Approved" },
+  { key: "live", label: "Live" },
+  { key: "archived", label: "Archived" },
   { key: "all", label: "All" },
 ];
+
+export const EMPTY_COUNTS: Record<Tab, number> = { needs_review: 0, changes_requested: 0, approved: 0, live: 0, archived: 0, all: 0 };
 
 export function parseTab(value: string | string[] | undefined): Tab {
   const v = Array.isArray(value) ? value[0] : value;
@@ -38,6 +42,56 @@ export function tabForStatus(status: string): Exclude<Tab, "all"> | null {
   if (status === "changes_requested") return "changes_requested";
   if (APPROVED_STATUSES.has(status)) return "approved";
   return null;
+}
+
+/**
+ * Life after approval. Status never changes for these: an ad is Live while
+ * its approval stands, it was marked live and its end date (if any) has not
+ * passed; Archived whenever archived_at is set.
+ */
+export type Lifecycle = {
+  status: string;
+  liveAt: string | null;
+  expiresAt: string | null;
+  archivedAt: string | null;
+};
+
+export function isLive(l: Lifecycle, now = Date.now()): boolean {
+  if (!l.liveAt || l.archivedAt || !APPROVED_STATUSES.has(l.status)) return false;
+  if (l.expiresAt && new Date(l.expiresAt).getTime() <= now) return false;
+  return true;
+}
+
+/** Which tab (other than All) an asset belongs to, lifecycle included. */
+export function tabForAsset(l: Lifecycle, now = Date.now()): Exclude<Tab, "all"> | null {
+  if (l.archivedAt) return "archived";
+  if (isLive(l, now)) return "live";
+  return tabForStatus(l.status);
+}
+
+/** Archive is for ads that are done deciding (approved, live, rejected or waiting on a revision). */
+export const ARCHIVABLE_STATUSES = new Set(["approved", "approved_with_exceptions", "rejected", "changes_requested"]);
+
+/** Where an ad can go live. Stored as the value; free text is kept as typed. */
+export const LIVE_CHANNELS: { value: string; label: string }[] = [
+  { value: "meta", label: "Meta" },
+  { value: "google", label: "Google" },
+  { value: "linkedin", label: "LinkedIn" },
+  { value: "tiktok", label: "TikTok" },
+  { value: "email", label: "Email" },
+  { value: "website", label: "Website" },
+  { value: "display", label: "Display" },
+  { value: "sms", label: "SMS" },
+  { value: "print", label: "Print" },
+  { value: "other", label: "Other" },
+];
+
+export function liveChannelLabel(c: string | null | undefined): string {
+  if (!c) return "";
+  const known = LIVE_CHANNELS.find((o) => o.value === c);
+  if (known) return known.label;
+  const words = c.replace(/[_-]+/g, " ").trim();
+  return words ? words[0].toUpperCase() + words.slice(1) : "";
 }
 
 export type StatusWord = "Needs review" | "Changes requested" | "Approved" | "Rejected" | "Withdrawn" | "Draft";
@@ -161,6 +215,31 @@ export function formatDateTime(iso: string | null | undefined, opts: { timeZone?
   const thisYear = String(new Date().getFullYear());
   const date = `${get("month")} ${get("day")}${year && year !== thisYear ? `, ${year}` : ""}`;
   return `${date}, ${get("hour")}:${get("minute")} ${get("dayPeriod")}`.replace(/\s+/g, " ").trim();
+}
+
+/** "Nov 10" (with the year when it is not the current one), pinned to APP_TIME_ZONE like formatDateTime. */
+export function formatDate(iso: string | null | undefined, opts: { timeZone?: string } = {}): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  const parts = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: opts.timeZone ?? APP_TIME_ZONE }).formatToParts(d);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  const year = get("year");
+  const thisYear = String(new Date().getFullYear());
+  return `${get("month")} ${get("day")}${year && year !== thisYear ? `, ${year}` : ""}`;
+}
+
+/**
+ * One line for the row and the ad page: "Live on Meta since Nov 10 · ends Jan 31",
+ * "Was live on Meta Nov 10 – Jan 31" once it ended, "Archived Nov 7" when archived.
+ */
+export function lifecycleLine(l: Lifecycle & { liveChannel: string | null }, now = Date.now()): string | null {
+  if (l.archivedAt) return `Archived ${formatDate(l.archivedAt)}`;
+  if (!l.liveAt) return null;
+  const where = liveChannelLabel(l.liveChannel);
+  const on = where ? ` on ${where}` : "";
+  if (isLive(l, now)) return `Live${on} since ${formatDate(l.liveAt)}${l.expiresAt ? ` · ends ${formatDate(l.expiresAt)}` : ""}`;
+  return `Was live${on} ${formatDate(l.liveAt)}${l.expiresAt ? ` – ${formatDate(l.expiresAt)}` : ""}`;
 }
 
 export function formatUsd(n: number | null | undefined, opts: { precise?: boolean } = {}): string {

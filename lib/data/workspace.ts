@@ -554,6 +554,8 @@ export type AuditExport = {
   exportedBy: string | null;
   decisions: unknown[];
   events: unknown[];
+  /** Every ad's status and life after approval (live, end date, archive). */
+  ads: unknown[];
 };
 
 /** Decisions and events for the workspace, for the Export audit record dialog. */
@@ -561,7 +563,9 @@ export async function getAuditExport(profileId: string): Promise<AuditExport | n
   const { supabase, user } = await requireMember(profileId);
   const { data: profile } = await supabase.from("profiles").select("id, name").eq("id", profileId).maybeSingle();
   if (!profile) return null;
-  const [decisions, events] = await Promise.all([
+  const adColumns = "id, title, product, channel, status, submitted_at, latest_version_id, approved_version_id, approved_decision_id, re_review_reason, created_at, updated_at";
+  const lifecycleColumns = "live_at, live_channel, live_url, expires_at, archived_at, archive_reason";
+  const [decisions, events, ads] = await Promise.all([
     supabase
       .from("decisions")
       .select(
@@ -576,9 +580,17 @@ export async function getAuditExport(profileId: string): Promise<AuditExport | n
       .eq("profile_id", profileId)
       .order("created_at", { ascending: true })
       .limit(5000),
+    supabase.from("assets").select(`${adColumns}, ${lifecycleColumns}`).eq("profile_id", profileId).order("created_at", { ascending: true }).limit(5000),
   ]);
   if (decisions.error) console.error("[workspace] audit decisions failed:", decisions.error.code);
   if (events.error) console.error("[workspace] audit events failed:", events.error.code);
+  // 42703: the lifecycle migration has not run yet; export the ads without those fields.
+  let adRows: unknown[] = ads.data ?? [];
+  if (ads.error) {
+    if (ads.error.code !== "42703") console.error("[workspace] audit ads failed:", ads.error.code);
+    const fallback = await supabase.from("assets").select(adColumns).eq("profile_id", profileId).order("created_at", { ascending: true }).limit(5000);
+    adRows = fallback.data ?? [];
+  }
   const p = profile as { id: string; name: string };
   return {
     workspace: { id: p.id, name: p.name },
@@ -586,6 +598,7 @@ export async function getAuditExport(profileId: string): Promise<AuditExport | n
     exportedBy: user.email,
     decisions: decisions.data ?? [],
     events: events.data ?? [],
+    ads: adRows,
   };
 }
 

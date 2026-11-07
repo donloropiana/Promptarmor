@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Ban, ClockAlert, Copy, FlaskConical, Keyboard, MailCheck, Recycle, RefreshCw, ShieldOff, Sparkles, TrendingUp } from "lucide-react";
+import { ArrowLeft, Ban, CalendarX, ClockAlert, Copy, FlaskConical, Keyboard, MailCheck, Recycle, RefreshCw, ShieldOff, Sparkles, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, useTransition } from "react";
 import { toast } from "sonner";
@@ -16,7 +16,7 @@ import { AskBox } from "./ask-box";
 import { AutoRefresh } from "./auto-refresh";
 import { CreativeView, type CreativeViewMode } from "./creative-view";
 import { DecisionBar, NO_DIALOGS, blockingReason, type DecisionDialogs } from "./decision-bar";
-import { APPROVED_STATUSES, formatDuration, formatUsd, relativeTime, shortSha, stageLabel } from "./format";
+import { APPROVED_STATUSES, formatDuration, formatUsd, isLive, relativeTime, shortSha, stageLabel } from "./format";
 import { HiddenTextAlert } from "./hidden-text-alert";
 import { History } from "./history";
 import { IssuesPanel, issueTitle } from "./issues-panel";
@@ -24,6 +24,7 @@ import { LocalDateTime, useLocalDateTime } from "./local-time";
 import { LongText } from "./long-text";
 import { MetaChips } from "./meta-chips";
 import { ReviewSession } from "./review-session";
+import { ShipIt } from "./ship-it";
 import { AD_SHORTCUTS, ShortcutsDialog, isTypingTarget } from "./shortcuts-dialog";
 import { ReasonTags, StatusWord } from "./status";
 import { ChangeSummaryLine, WordDiff, summariseChanges } from "./what-changed";
@@ -44,7 +45,7 @@ function tagsFor(detail: AdDetail): string[] {
   const tags: string[] = [];
   if (detail.isSample) tags.push("Sample");
   if (detail.alerts.some((a) => !a.acknowledgedAt)) tags.push("Hidden text");
-  if (detail.status === "re_review_due") tags.push("Rates changed");
+  if (detail.status === "re_review_due") tags.push(detail.reReviewReason?.kind === "expired" ? "Expired" : "Rates changed");
   if (detail.status === "approved_with_exceptions") tags.push("With exceptions");
   if (detail.changedAfterApproval) tags.push("Changed after approval");
   if (!detail.checking && !detail.aiScreened && detail.latestRun && detail.latestRun.status !== "queued" && detail.latestRun.status !== "running") tags.push("Not AI-screened");
@@ -64,8 +65,11 @@ export function AdPage({ detail, userId }: { detail: AdDetail; userId: string })
   const [creativeView, setCreativeView] = useState<CreativeViewMode>(detail.latest.content.format === "text" ? "text" : "preview");
 
   const approved = APPROVED_STATUSES.has(detail.status);
-  // Approved ads are frozen (withdraw first); rejected/withdrawn ones can still be re-decided.
-  const readOnly = approved;
+  const archived = Boolean(detail.archivedAt);
+  const live = isLive({ status: detail.status, liveAt: detail.liveAt, expiresAt: detail.expiresAt, archivedAt: detail.archivedAt }, detail.now);
+  // Approved ads are frozen (withdraw first); archived ones too (unarchive
+  // first); rejected/withdrawn ones can still be re-decided.
+  const readOnly = approved || archived;
   const openIssueIds = useMemo(() => detail.findings.filter((f) => f.open || f.disposition?.disposition === "accepted_exception").map((f) => f.id), [detail.findings]);
   const openCount = detail.findings.filter((f) => f.open).length;
   const changes = useMemo(() => (detail.previous ? summariseChanges(detail.findings, detail.previousFindings) : null), [detail.findings, detail.previousFindings, detail.previous]);
@@ -164,11 +168,23 @@ export function AdPage({ detail, userId }: { detail: AdDetail; userId: string })
     <div className="min-w-0 space-y-4 p-4 sm:p-5">
       {isDesktop && alert}
 
+      {(archived || approved) && <ShipIt detail={detail} />}
+
       {approved && detail.approval && <ApprovalRecord detail={detail} />}
 
       <CheckStatus detail={detail} openCount={openCount} />
 
-      {detail.status === "re_review_due" && (
+      {detail.status === "re_review_due" && detail.reReviewReason?.kind === "expired" ? (
+        <div className="flex items-start gap-3 rounded-xl border bg-card p-4">
+          <CalendarX aria-hidden className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+          <div className="min-w-0">
+            <div className="text-sm font-medium">Approval expired</div>
+            <p className="text-sm text-muted-foreground">
+              {typeof detail.reReviewReason?.summary === "string" ? detail.reReviewReason.summary : "The end date set when this ad went live has passed. Decide again before it runs further."}
+            </p>
+          </div>
+        </div>
+      ) : detail.status === "re_review_due" ? (
         <div className="flex items-start gap-3 rounded-xl border bg-card p-4">
           <TrendingUp aria-hidden className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
           <div className="min-w-0">
@@ -178,7 +194,7 @@ export function AdPage({ detail, userId }: { detail: AdDetail; userId: string })
             </p>
           </div>
         </div>
-      )}
+      ) : null}
 
       {detail.changedAfterApproval && !approved && detail.approval && (
         <div className="flex items-start gap-3 rounded-xl border bg-card p-4">
@@ -285,7 +301,7 @@ export function AdPage({ detail, userId }: { detail: AdDetail; userId: string })
             <ArrowLeft aria-hidden className="size-3.5" /> Ads
           </Link>
           <span aria-hidden>·</span>
-          <StatusWord status={detail.status} checking={detail.checking} />
+          <StatusWord status={detail.status} checking={detail.checking} live={live} archived={archived} />
           <ReasonTags tags={tagsFor(detail)} />
           <Button type="button" variant="ghost" size="icon-xs" aria-label="Keyboard shortcuts" onClick={() => setShowShortcuts(true)} className="ml-auto hidden sm:inline-flex">
             <Keyboard />
@@ -318,7 +334,7 @@ export function AdPage({ detail, userId }: { detail: AdDetail; userId: string })
               )}
             </div>
           </div>
-          <MetaChips assetId={detail.id} product={detail.product} channel={detail.channel} inferred={detail.latest.content.meta?.inferred} disabled={readOnly && approved} />
+          <MetaChips assetId={detail.id} product={detail.product} channel={detail.channel} inferred={detail.latest.content.meta?.inferred} disabled={readOnly} />
         </div>
       </header>
 

@@ -28,7 +28,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { removeAd, restoreAd } from "@/lib/actions/remove-ad";
 import type { AdListRow, ThumbIcon } from "@/lib/data/ads";
 
-import { relativeTime } from "./format";
+import { lifecycleLine, relativeTime } from "./format";
 import { useLocalDateTime } from "./local-time";
 import { RiskMark } from "./severity";
 import { ReasonTags, StatusWord } from "./status";
@@ -117,9 +117,23 @@ function RemoveButton({ row }: { row: AdListRow }) {
   );
 }
 
+function hostOf(url: string | null): string | null {
+  if (!url) return null;
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return null;
+  }
+}
+
 export function AdRow({ row, now }: { row: AdListRow; now: number }) {
   const submittedAbsolute = useLocalDateTime(row.submittedAt);
-  const removable = row.status !== "approved" && row.status !== "approved_with_exceptions";
+  const live = row.tab === "live";
+  const archived = Boolean(row.archivedAt);
+  // "Live on Meta since Nov 10 · ends Jan 31", "Was live…" or "Archived Nov 7"; the link's host when there is one.
+  const lifeLine = lifecycleLine({ status: row.status, liveAt: row.liveAt, expiresAt: row.expiresAt, archivedAt: row.archivedAt, liveChannel: row.liveChannel }, now);
+  const liveHost = !archived && row.liveAt ? hostOf(row.liveUrl) : null;
+  const removable = row.status !== "approved" && row.status !== "approved_with_exceptions" && !archived;
   // Samples sit under their own heading in the list, so the tag would repeat it.
   const tags = row.isSample ? row.tags.filter((t) => t !== "Sample") : row.tags;
   // The risk mark only earns its place when there is something open; the
@@ -132,7 +146,7 @@ export function AdRow({ row, now }: { row: AdListRow; now: number }) {
         data-ad-row
         href={`/ads/${row.id}`}
         className="group flex min-w-0 flex-1 gap-3 px-3 py-3 outline-none transition-colors hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-inset sm:px-4"
-        aria-label={`${row.title}. ${row.checking ? "Checking" : row.status.replace(/_/g, " ")}.`}
+        aria-label={`${row.title}. ${row.checking ? "Checking" : archived ? "archived" : live ? "live" : row.status.replace(/_/g, " ")}.`}
       >
         <Thumb thumbnail={row.thumbnail} title={row.title} />
         <div className="min-w-0 flex-1">
@@ -141,7 +155,7 @@ export function AdRow({ row, now }: { row: AdListRow; now: number }) {
               {row.title}
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              <StatusWord status={row.status} checking={row.checking} className="hidden sm:inline-flex" />
+              <StatusWord status={row.status} checking={row.checking} live={live} archived={archived} className="hidden sm:inline-flex" />
               <span className="text-xs tabular-nums text-muted-foreground" title={submittedAbsolute}>
                 {relativeTime(row.submittedAt, now)}
               </span>
@@ -162,7 +176,9 @@ export function AdRow({ row, now }: { row: AdListRow; now: number }) {
                 {row.topIssue.quote && row.topIssue.explanation && <span> — </span>}
                 {row.topIssue.explanation && <span>{row.topIssue.explanation}</span>}
               </>
-            ) : row.tab === "approved" ? (
+            ) : archived ? (
+              <span>{row.archiveReason ? `Archived: ${row.archiveReason}` : "Archived"}</span>
+            ) : row.tab === "approved" || row.tab === "live" ? (
               // The approval is the news on this tab, not the absence of open issues.
               <span>{row.withExceptions ? `Approved with ${row.exceptionCount || "recorded"} exception${row.exceptionCount === 1 ? "" : "s"}` : "Approved as written"}</span>
             ) : row.notScreened ? (
@@ -190,9 +206,15 @@ export function AdRow({ row, now }: { row: AdListRow; now: number }) {
                 Seen in {row.seenIn} places
               </span>
             )}
-            <StatusWord status={row.status} checking={row.checking} className="sm:hidden" />
+            <StatusWord status={row.status} checking={row.checking} live={live} archived={archived} className="sm:hidden" />
             <ReasonTags tags={tags} />
-            {row.approvedVersionNo != null && row.tab === "approved" && (
+            {lifeLine && (
+              <span data-life-line className="text-xs text-muted-foreground">
+                {lifeLine}
+                {liveHost ? ` · ${liveHost}` : ""}
+              </span>
+            )}
+            {row.approvedVersionNo != null && (row.tab === "approved" || row.tab === "live") && (
               <span className="text-xs text-muted-foreground">
                 V{row.approvedVersionNo}
                 {row.approvedBy ? ` by ${row.approvedBy}` : ""}
