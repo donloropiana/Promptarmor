@@ -4,6 +4,7 @@ import type { Product, Severity } from "@/lib/types/ads";
 
 import { MODELS, costUsd } from "./budget";
 import { detectHiddenText } from "./hidden-text";
+import { cheapProviderOptions, tryModels } from "./ladder";
 import { assertModelCallsAllowed } from "./mode";
 import { runOfferChecks } from "./offer-checks";
 import { buildCheckSystemPrompt, buildCheckUserPrompt, promptHash } from "./prompts";
@@ -164,7 +165,6 @@ export async function analyzeContent(input: AnalyzeContentInput): Promise<Analyz
   }
 
   assertModelCallsAllowed("ad check");
-  const model = MODELS.check;
 
   // Constant per product + rules + terms, so the provider can cache it; the ad itself stays outside.
   const system = buildCheckSystemPrompt({ rules, offers, product: input.product });
@@ -176,23 +176,27 @@ export async function analyzeContent(input: AnalyzeContentInput): Promise<Analyz
     alreadyFlagged: deterministic,
   });
 
-  const result = await generateText({
-    model,
-    instructions: {
-      role: "system",
-      content: system,
-      providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
-    },
-    prompt,
-    output: Output.object({
-      name: "ad_check",
-      description: "Compliance findings and hidden-text candidates for one ad.",
-      schema: AnalysisOutputSchema,
+  // Cheapest capable model first; the gateway refusing one moves to the next (lib/ai/ladder.ts).
+  const { value: result, model } = await tryModels(MODELS.checkLadder, (candidate) =>
+    generateText({
+      model: candidate,
+      instructions: {
+        role: "system",
+        content: system,
+        providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
+      },
+      prompt,
+      output: Output.object({
+        name: "ad_check",
+        description: "Compliance findings and hidden-text candidates for one ad.",
+        schema: AnalysisOutputSchema,
+      }),
+      providerOptions: cheapProviderOptions(candidate),
+      maxOutputTokens: 8_000,
+      maxRetries: 1,
+      timeout: { totalMs: LLM_TIMEOUT_MS },
     }),
-    maxOutputTokens: 6_000,
-    maxRetries: 1,
-    timeout: { totalMs: LLM_TIMEOUT_MS },
-  });
+  );
 
   const inputTokens = result.usage.inputTokens ?? 0;
   const outputTokens = result.usage.outputTokens ?? 0;

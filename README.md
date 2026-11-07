@@ -92,11 +92,11 @@ Longer version: [docs/security.md](docs/security.md).
 
 Longer version, with the per-mode table and prices: [docs/ai-policy.md](docs/ai-policy.md).
 
-- **Cheapest capable model everywhere by default.** The check model is `anthropic/claude-haiku-5.5` unless `AI_CHECK_MODEL` names another gateway id; Opus ids are refused (`lib/ai/budget.ts`). Transcription and Ask about this ad are always Haiku. Arrivals are classified by keywords, never by a model.
+- **Cheapest capable model, chosen by evidence.** The check runs on `openai/gpt-oss-120b` ($0.10/$0.50 per 1M tokens, about $0.0012 per ad); transcription and Ask about this ad run on `openai/gpt-5-nano` ($0.05/$0.40). Picked on 2026-11-07 from published instruction-following benchmarks and a live run of the known-answer eval over the 20 fixtures: gpt-oss-120b recall 83% with 15 false positives; gpt-5-mini recall 100% but 38 false positives at twice the cost; gemini-2.5-flash-lite recall 67% with 31 false positives. Every call walks a **model ladder** (`lib/ai/ladder.ts`): if the gateway refuses a model (plan restriction, unknown id) or the answer does not fit the schema, the next model is tried and the run records which one answered. Order for checks: gpt-oss-120b → gpt-5-mini → gemini-2.5-flash-lite → claude-haiku-5.5 (as good or better, but it needs paid credits on the gateway). `AI_CHECK_MODEL` overrides the first rung; Opus ids are refused. Arrivals are classified by keywords, never by a model.
 - **No model calls outside production.** `AI_MODE` (`lib/ai/mode.ts`) is `live` only when `VERCEL_ENV=production`; everywhere else it defaults to `off`, where every check still completes with the deterministic product-terms and hidden-text findings and says "AI check skipped (test mode)". `replay` uses recorded model output from `fixtures/recorded/` matched by the ad text's hash, at $0. Every model call checks the mode first, so a test can never spend by accident.
 - **Identical content is never re-checked.** Each run computes `reuse_key` = sha256(normalized text, rule version ids, product version ids, prompt hash); a previous complete run with the same key in the workspace has its findings copied at $0, in every mode ("Reused an earlier identical check" in the history). Byte-identical re-submissions of the same ad are refused outright (`PT409`).
 - **Prompt caching.** The constant part of the check prompt (template, rules, product terms) sits before an Anthropic cache breakpoint; cache read and write tokens are priced separately and recorded per run.
-- **Hard caps in the database:** $10 per UTC day across all workspaces, $3 per workspace by default (ClearPath: $5, trusted), a $5 shared pool for untrusted workspaces and $3 per creator. Reservations are estimated from characters, settled with real tokens, and released on failure. The Ads list shows "AI spend today vs cap" and a banner at 80%. The AI Gateway key itself is capped at $2 per day on Vercel's side; that is the hard ceiling, and nothing in the repo depends on it.
+- **Hard caps in the database:** $5 per UTC day across all workspaces, $3 per workspace by default, a $5 shared pool for untrusted workspaces and $3 per creator. Reservations are estimated from characters, settled with real tokens, and released on failure. The Ads list shows "AI spend today vs cap" and a banner at 80%. The AI Gateway key itself is capped at $5 per day on Vercel's side, so the database and the gateway agree on the ceiling; nothing in the repo depends on it.
 - **Cents per check**, shown per run on the ad page (model, tokens, cost) and on the Approved record. `/api/health` reports the mode and check model in use to a signed-in user.
 
 ## Architecture
@@ -110,7 +110,7 @@ browser ──► Next.js 16 App Router on Vercel (Hobby)
              ├─► Supabase Postgres (RLS, security-definer RPCs,
              │     immutability triggers, budget ledger, private storage)
              ├─► Vercel AI Gateway ── AI SDK generateText + Output.object
-             │     (one check call; Haiku for transcription and Q&A)
+             │     (one check call; gpt-5-nano for transcription and Q&A)
              └─► Nango Cloud (managed Google / Microsoft OAuth apps)
                    ├─ connect sessions (browser gets a 30-min token)
                    ├─ read-only proxy to Gmail / Drive / Graph

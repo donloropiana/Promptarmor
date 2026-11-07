@@ -6,6 +6,7 @@ import { requireSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { VersionContent } from "@/lib/types/ads";
 
 import { MODELS, costUsd, friendlyAiError, isAiGatewayConfigured, releaseBudget, reserveBudget, settleBudget } from "./budget";
+import { cheapProviderOptions, tryModels } from "./ladder";
 import { getAiMode } from "./mode";
 import { ASK_SYSTEM_PROMPT, buildAskUserPrompt } from "./prompts";
 
@@ -153,29 +154,33 @@ export async function askAboutAd(input: { profileId: string; userId: string; ass
   if (!reservation) return { ok: false, error: "Today's AI budget for this workspace is used up. Try again tomorrow." };
 
   try {
-    const result = await generateText({
-      model: MODELS.cheap,
-      instructions: ASK_SYSTEM_PROMPT,
-      prompt: buildAskUserPrompt({
-        adText,
-        findings: issueList,
-        rules: Array.from(ruleByVersion.values()),
-        alerts: (alerts ?? []).map((a) => ({ kind: a.kind, excerpt: a.excerpt })),
-        question,
-      }),
-      maxOutputTokens: 400,
-      maxRetries: 1,
-      timeout: { totalMs: CHAT_TIMEOUT_MS },
+    const askPrompt = buildAskUserPrompt({
+      adText,
+      findings: issueList,
+      rules: Array.from(ruleByVersion.values()),
+      alerts: (alerts ?? []).map((a) => ({ kind: a.kind, excerpt: a.excerpt })),
+      question,
     });
+    const { value: result, model } = await tryModels(MODELS.cheapLadder, (candidate) =>
+      generateText({
+        model: candidate,
+        instructions: ASK_SYSTEM_PROMPT,
+        prompt: askPrompt,
+        providerOptions: cheapProviderOptions(candidate),
+        maxOutputTokens: 600,
+        maxRetries: 1,
+        timeout: { totalMs: CHAT_TIMEOUT_MS },
+      }),
+    );
     const inputTokens = result.usage.inputTokens ?? 0;
     const outputTokens = result.usage.outputTokens ?? 0;
     const cache = { read: result.usage.inputTokenDetails?.cacheReadTokens ?? 0, write: result.usage.inputTokenDetails?.cacheWriteTokens ?? 0 };
     await settleBudget(admin, {
       requestId: reservation.requestId,
-      costUsd: costUsd(MODELS.cheap, inputTokens, outputTokens, cache),
+      costUsd: costUsd(model, inputTokens, outputTokens, cache),
       inputTokens,
       outputTokens,
-      model: MODELS.cheap,
+      model,
     });
     const answer = stripMarkdown(result.text);
     return answer ? { ok: true, answer } : { ok: false, error: "No answer came back. Try asking in a different way." };

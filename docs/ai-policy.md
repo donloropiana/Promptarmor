@@ -4,11 +4,11 @@ How the product decides whether to call a model, which model, and how it avoids 
 
 ## The rules
 
-1. **Cheapest capable model everywhere.** Every call uses `anthropic/claude-haiku-5.5` unless `AI_CHECK_MODEL` names another gateway model for the ad check. Classification, image transcription and "Ask about this ad" are always Haiku. **Opus is never used**: an Opus id in `AI_CHECK_MODEL` is refused with a warning and Haiku is used.
+1. **Cheapest capable model, chosen by evidence.** The ad check uses `openai/gpt-oss-120b`; image transcription and "Ask about this ad" use `openai/gpt-5-nano`. `AI_CHECK_MODEL` can name another gateway model for the check. Every call walks a ladder (`lib/ai/ladder.ts`): a model the gateway refuses, or an answer that does not fit the schema (after one retry), moves to the next rung, and the run records the model that answered. Check ladder: gpt-oss-120b → gpt-5-mini → gemini-2.5-flash-lite → claude-haiku-5.5. Cheap ladder: gpt-5-nano → gemini-2.5-flash-lite → claude-haiku-5.5. **Opus is never used**: an Opus id in `AI_CHECK_MODEL` is refused with a warning and the default is used. Eval basis (2026-11-07, scripts/eval.ts live over 20 fixtures): gpt-oss-120b recall 83%, 15 false positives, $0.0012/ad; gpt-5-mini 100% / 38 / $0.0022; gemini-2.5-flash-lite 67% / 31.
 2. **No AI spend outside production.** `AI_MODE` decides whether a model may be called at all. Unset, it is `live` only when `VERCEL_ENV=production`; everywhere else (laptop, preview deployments, scripts) it is `off`. In `off` and `replay` no model call is ever made and no budget is reserved. Every `generateText` in the codebase sits behind `assertModelCallsAllowed()` (lib/ai/mode.ts), so a script cannot spend by accident.
 3. **Identical content is never re-checked.** Before any model call the engine computes a reuse key and copies the findings of an earlier identical check at $0 (see Reuse).
 4. **The constant part of the prompt is cached.** Instructions + the product's rules + product terms are one cacheable system message; the ad text is outside the cache. Cached reads and writes are priced and recorded.
-5. **Every live call is budgeted.** `reserve_ai_budget` before, `settle_ai_budget` after (or `release_ai_budget` when nothing was called), $10/day global and a per-workspace cap in the database (docs/schema.md §4). The gateway key itself is capped at $2/day on Vercel's side, so that is the hard ceiling whatever the database allows.
+5. **Every live call is budgeted.** `reserve_ai_budget` before, `settle_ai_budget` after (or `release_ai_budget` when nothing was called), $5/day global and a $3/day per-workspace cap in the database (docs/schema.md §4). The gateway key itself is capped at $5/day on Vercel's side, so the database and the gateway agree on the ceiling.
 
 ## AI_MODE
 
@@ -47,7 +47,12 @@ Notes
 
 | Model | Input | Output |
 |---|---|---|
-| anthropic/claude-haiku-5.5 (default) | 0.10 | 0.50 |
+| openai/gpt-oss-120b (check default) | 0.10 | 0.50 |
+| openai/gpt-5-mini | 0.25 | 2.00 |
+| openai/gpt-5-nano (cheap default) | 0.05 | 0.40 |
+| openai/gpt-oss-20b | 0.03 | 0.14 |
+| google/gemini-2.5-flash-lite | 0.10 | 0.40 |
+| anthropic/claude-haiku-5.5 | 0.10 | 0.50 |
 | anthropic/claude-sonnet-5.5 | 2.00 | 10.00 |
 | anthropic/claude-haiku-4.5 | 1.00 | 5.00 |
 | anthropic/claude-sonnet-4.5 / -4 | 3.00 | 15.00 |
@@ -64,6 +69,6 @@ An unknown model id is priced like Sonnet 5.5 so estimates and reservations stay
 
 ```
 AI_MODE=            # live | off | replay   (unset: live in production, off elsewhere)
-AI_CHECK_MODEL=     # gateway id for the ad check (unset: anthropic/claude-haiku-5.5; Opus refused)
+AI_CHECK_MODEL=     # gateway id for the ad check (unset: openai/gpt-oss-120b; Opus refused)
 AI_GATEWAY_API_KEY= # only when neither Vercel OIDC nor the CLI login can authenticate
 ```

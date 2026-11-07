@@ -13,6 +13,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { analyzeContent, hiddenTextRuleCode, LLM_TIMEOUT_MS, mergeFindings } from "./analyze";
 import { MODELS, costUsd, estimateCostUsd, friendlyAiError, releaseBudget, reserveBudget, settleBudget, type Reservation } from "./budget";
 import { detectHiddenText } from "./hidden-text";
+import { cheapProviderOptions, tryModels } from "./ladder";
 import { assertModelCallsAllowed, getAiMode, type RunMode } from "./mode";
 import { deterministicOfferRuleCodes } from "./offer-checks";
 import { promptHash, TRANSCRIBE_SYSTEM_PROMPT } from "./prompts";
@@ -931,26 +932,29 @@ function verifyFinding(f: ContentFinding, text: string, sections: Section[], rul
 
 async function transcribe(bytes: Uint8Array, mediaType: string): Promise<{ text: string; inputTokens: number; outputTokens: number; costUsd: number }> {
   assertModelCallsAllowed("image transcription");
-  const result = await generateText({
-    model: MODELS.cheap,
-    instructions: TRANSCRIBE_SYSTEM_PROMPT,
-    messages: [
-      {
-        role: "user",
-        content: [
-          { type: "file", data: bytes, mediaType },
-          { type: "text", text: "Transcribe every piece of visible text in this ad, exactly as written." },
-        ],
-      },
-    ],
-    maxOutputTokens: 4_000,
-    maxRetries: 1,
-    timeout: { totalMs: Math.min(LLM_TIMEOUT_MS, 60_000) },
-  });
+  const { value: result, model } = await tryModels(MODELS.cheapLadder, (candidate) =>
+    generateText({
+      model: candidate,
+      instructions: TRANSCRIBE_SYSTEM_PROMPT,
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "file", data: bytes, mediaType },
+            { type: "text", text: "Transcribe every piece of visible text in this ad, exactly as written." },
+          ],
+        },
+      ],
+      providerOptions: cheapProviderOptions(candidate),
+      maxOutputTokens: 4_000,
+      maxRetries: 1,
+      timeout: { totalMs: Math.min(LLM_TIMEOUT_MS, 60_000) },
+    }),
+  );
   const inputTokens = result.usage.inputTokens ?? 0;
   const outputTokens = result.usage.outputTokens ?? 0;
   const text = result.text.trim() === "NO_TEXT" ? "" : result.text.trim();
-  return { text, inputTokens, outputTokens, costUsd: costUsd(MODELS.cheap, inputTokens, outputTokens) };
+  return { text, inputTokens, outputTokens, costUsd: costUsd(model, inputTokens, outputTokens) };
 }
 
 // ---------------------------------------------------------------------------
