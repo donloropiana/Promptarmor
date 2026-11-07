@@ -9,9 +9,10 @@ const ITEMS = [
   { href: "/settings/members", label: "Members" },
   { href: "/settings/accounts", label: "Connected accounts" },
   { href: "/settings/workspace", label: "Workspace" },
+  { href: "/settings/account", label: "Your account" },
 ] as const;
 
-/** Members | Connected accounts | Workspace, as a quiet underline nav. */
+/** Members | Connected accounts | Workspace | Your account, as a quiet underline nav. */
 export function SettingsNav() {
   const pathname = usePathname();
   return (
