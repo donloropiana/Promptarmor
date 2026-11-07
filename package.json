@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "bun --bun eslint",
+    "typecheck": "bun --bun next typegen && bun --bun tsc --noEmit -p .",
+    "test": "bun test ./src"
   },
   "dependencies": {
     "@formkit/auto-animate": "^0.10.2",
