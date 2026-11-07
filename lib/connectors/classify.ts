@@ -107,8 +107,28 @@ function score(signals: Signal[], haystack: string): { total: number; labels: st
   return { total, labels };
 }
 
+/**
+ * Mail that is never an ad, whatever words it contains: bounces, calendar
+ * traffic, account and security notices, receipts. A bounce of a real
+ * campaign quotes the whole ad, so these must short-circuit before scoring.
+ * Plain "noreply@" senders are NOT here: most real marketing mail comes from one.
+ */
+const SYSTEM_SENDER = /\b(mailer-daemon|postmaster|mail delivery|calendar-notification|no-reply@accounts\.google\.com|no-reply@google\.com|account-security-noreply|msa@communication\.microsoft\.com|noreply@github\.com|no-reply@dropbox\.com|drive-shares-(dm-)?noreply)\b/i;
+const SYSTEM_SUBJECT = /^\s*(delivery status notification|undeliverable|mail delivery failed|returned mail|delivery failure|failure notice|accepted:|declined:|tentative:|invitation:|updated invitation:|canceled event:|cancelled event:|reminder:|welcome to (google|microsoft|your new)|verify your email|confirm your email|security alert|new sign-in|sign-in attempt|your (receipt|invoice|order|statement|password|verification code)|password reset|two-step|2-step|your account (has been|was)|shared with you|has shared|invited you to)/i;
+
 export function classifyItem(input: ClassifyInput): ClassifyResult {
   const mime = (input.mimeType ?? "").toLowerCase();
+  if (input.kind === "email") {
+    const from = `${input.sender ?? ""} ${input.senderEmail ?? ""}`;
+    const subject = input.title ?? "";
+    if (SYSTEM_SENDER.test(from) || SYSTEM_SUBJECT.test(subject)) {
+      return {
+        classification: "not_marketing",
+        reason: "System mail (bounce, calendar, account or receipt), not an ad",
+        inferred: { product: "unknown", channel: null, confirmed: false, score: -99, marketing_signals: [], other_signals: ["system mail"] },
+      };
+    }
+  }
   // Filenames use _ - . as separators ("cashplus_300x250.png"); make them word breaks.
   const meta = [input.title, input.filename, input.parentTitle, input.sender, input.senderEmail]
     .filter(Boolean)
@@ -205,7 +225,29 @@ export function classifyItem(input: ClassifyInput): ClassifyResult {
   }
   return {
     classification: "uncertain",
-    reason: `Mixed signals; marketing: ${m.labels.join(", ") || "none"}; other: ${n.labels.join(", ") || "none"}`,
+    reason: m.labels.length > 0 ? `Could be an ad: has ${plainSignals(m.labels)}` : "Could be an ad",
     inferred: inferred(net),
   };
+}
+
+/** Our own signal labels in plain words for the triage row ("a call to action, offer terms"). */
+function plainSignals(labels: string[]): string {
+  const words: Record<string, string> = {
+    APR: "an APR",
+    rate: "a rate",
+    percentage: "a percentage",
+    offer: "an offer",
+    apply: "an apply link",
+    loan: "a loan mention",
+    card: "a card mention",
+    mortgage: "a mortgage mention",
+    terms: "terms wording",
+    disclosure: "disclosure wording",
+    CTA: "a call to action",
+    promo: "promotional wording",
+    creative: "campaign or creative words",
+    "ad size": "an ad size",
+  };
+  const list = labels.slice(0, 3).map((l) => words[l] ?? l);
+  return list.length > 1 ? `${list.slice(0, -1).join(", ")} and ${list[list.length - 1]}` : list[0] ?? "";
 }
