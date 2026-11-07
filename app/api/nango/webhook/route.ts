@@ -12,13 +12,15 @@ import {
   updateConnectionStatusByNango,
 } from "@/lib/nango/connections";
 import { isIntegrationKey } from "@/lib/nango/integrations";
-import { hasWebhookSigningKey, verifyNangoWebhookSignature } from "@/lib/nango/server";
+import { getNango, hasWebhookSigningKey, isNangoConfigured } from "@/lib/nango/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 /**
  * POST /api/nango/webhook  (configure in Nango: Environment Settings > Webhooks)
  *
- * 1. Verifies X-Nango-Hmac-Sha256 = hex HMAC-SHA256(raw body, webhook signing key).
+ * 1. Verifies X-Nango-Hmac-Sha256 = hex HMAC-SHA256(raw body, webhook signing key)
+ *    through the Nango client (constructed with webhookSigningKey =
+ *    NANGO_WEBHOOK_SIGNING_KEY; verifyIncomingWebhookRequest(rawBody, headers)).
  *    Unsigned or mis-signed requests get 401 and touch nothing.
  * 2. Handles "auth" webhooks:
  *    - creation / override, success  -> insert (or re-activate) the connections row,
@@ -65,18 +67,19 @@ const ok = (extra: Record<string, unknown> = {}) =>
 
 export async function POST(request: Request): Promise<Response> {
   const raw = new Uint8Array(await request.arrayBuffer());
+  const rawBody = new TextDecoder().decode(raw);
 
-  if (!hasWebhookSigningKey()) {
-    console.error("[nango/webhook] NANGO_WEBHOOK_SIGNING_KEY is not configured; rejecting webhook.");
+  if (!isNangoConfigured() || !hasWebhookSigningKey()) {
+    console.error("[nango/webhook] NANGO_SECRET_KEY / NANGO_WEBHOOK_SIGNING_KEY are not configured; rejecting webhook.");
     return Response.json({ error: "webhook verification not configured" }, { status: 503 });
   }
-  if (!verifyNangoWebhookSignature(raw, request.headers.get("x-nango-hmac-sha256"))) {
+  if (!verifySignature(rawBody, request.headers)) {
     return Response.json({ error: "invalid signature" }, { status: 401 });
   }
 
   let payload: unknown;
   try {
-    payload = JSON.parse(new TextDecoder().decode(raw));
+    payload = JSON.parse(rawBody);
   } catch {
     return ok({ ignored: "invalid json" });
   }
@@ -103,6 +106,25 @@ export async function POST(request: Request): Promise<Response> {
   } catch (err) {
     console.error("[nango/webhook] processing failed:", (err as Error).message);
     return ok({ processed: false });
+  }
+}
+
+/**
+ * Nango's verifyIncomingWebhookRequest: HMAC-SHA256 of the RAW body with the
+ * environment's webhook signing key, compared in constant time against the
+ * X-Nango-Hmac-Sha256 header. The client is built with webhookSigningKey
+ * (lib/nango/server getNango), so the API key is never used for signatures.
+ */
+function verifySignature(rawBody: string, headers: Headers): boolean {
+  const plain: Record<string, string> = {};
+  headers.forEach((value, key) => {
+    plain[key] = value;
+  });
+  try {
+    return getNango().verifyIncomingWebhookRequest(rawBody, plain);
+  } catch (err) {
+    console.error("[nango/webhook] signature verification failed:", (err as Error).message);
+    return false;
   }
 }
 

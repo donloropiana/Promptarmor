@@ -17,7 +17,6 @@ type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
 const ERRORS: Record<string, string> = {
   link_expired: "That link is invalid or has expired. Send a new one.",
-  oauth: "Google sign-in was cancelled or failed. Try again.",
   callback: "We couldn't complete sign-in. Try again.",
   config: "Sign-in isn't configured on this deployment yet.",
 };

@@ -1,0 +1,20 @@
+{
+  "key": "personal-loan-landing-compliant",
+  "title": "Personal loan landing page with a payment example (compliant)",
+  "product": "personal_loan",
+  "channel": "landing_page",
+  "format": "text",
+  "text": "One loan. One fixed monthly payment.\n\nBorrow $2,000 to $40,000 for 24 to 60 months at a fixed rate from 8.99% to 24.99% APR. Pay off high-interest cards, cover a big expense or fund a project, with no prepayment penalty.\n\n$10,000 for $336.89 a month*\n\n*Example: a $10,000 loan with a 36-month term at a 12.99% interest rate and a 3% origination fee ($300, deducted from your proceeds) has a 15.13% APR and 36 monthly payments of $336.89. Your rate depends on your credit history, income, loan amount and term. Origination fee 1% to 5% of the loan amount. APR includes a 0.25% discount for autopay.\n\nCheck your rate in 2 minutes. Checking won't affect your credit score. Approval depends on your credit and income.\n\nCheck my rate",
+  "expected_rule_codes": [],
+  "not_expected_rule_codes": [
+    "TRIGGER-CLOSED",
+    "OFFER-MATCH",
+    "APR-TERM",
+    "APPROVAL-CLAIMS",
+    "DEBT-SAVINGS",
+    "RATE-FIXED",
+    "HIDDEN-TEXT"
+  ],
+  "sample_chip": false,
+  "notes": "'$336.89 a month' is a trigger term, and the example gives the amount, term, interest rate, fee, APR and number of payments; every number matches PL-1 (the APR of the example is computed, not invented). Expect zero issues."
+}

@@ -1,0 +1,32 @@
+{
+  "key": "paid-social-personal-loan",
+  "title": "Crush your credit card debt (paid social post)",
+  "product": "personal_loan",
+  "channel": "paid_social",
+  "format": "text",
+  "text": "Crush your credit card debt.\n\nRoll your high-interest cards into one simple ClearPath Personal Loan. Rates from 5.99% APR. Guaranteed approval. No credit check. Borrow $2,000 to $40,000 and pay as low as $199/mo.\n\nCheck your rate in 2 minutes. Checking won't affect your credit score.\n\nApply now: clearpath.example/debt\n#ClearPath #DebtFree #PersonalLoan",
+  "revision": "Crush your credit card debt.\n\nRoll your high-interest cards into one simple ClearPath Personal Loan. Rates from 8.99% APR. Fixed rate for life. Borrow $2,000 to $40,000 and pay as low as $199/mo.\n\nCheck your rate in 2 minutes. Checking won't affect your credit score.\n\nApply now: clearpath.example/debt\n#ClearPath #DebtFree #PersonalLoan",
+  "expected_rule_codes": [
+    "OFFER-MATCH",
+    "APPROVAL-CLAIMS",
+    "TRIGGER-CLOSED"
+  ],
+  "not_expected_rule_codes": [
+    "CARD-INTRO",
+    "CARD-TRIGGER",
+    "EQUAL-HOUSING",
+    "HIDDEN-TEXT",
+    "AFFILIATE-DISCLOSE"
+  ],
+  "revision_expected_rule_codes": [
+    "RATE-FIXED",
+    "TRIGGER-CLOSED"
+  ],
+  "revision_not_expected_rule_codes": [
+    "OFFER-MATCH",
+    "APPROVAL-CLAIMS",
+    "HIDDEN-TEXT"
+  ],
+  "sample_chip": true,
+  "notes": "V1: 5.99% APR is below the PL-1 floor of 8.99% (offer mismatch); 'Guaranteed approval' and 'No credit check' are deceptive approval claims; '$199/mo' is a Reg Z trigger term with no terms of repayment or APR. V2 (revision): fixes the rate and removes the approval claims, but adds 'Fixed rate for life' (new) and keeps '$199/mo' without terms (still there)."
+}

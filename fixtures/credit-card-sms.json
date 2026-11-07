@@ -1,0 +1,20 @@
+{
+  "key": "credit-card-sms",
+  "title": "Cash Rewards Card text message",
+  "product": "credit_card",
+  "channel": "sms",
+  "format": "text",
+  "text": "ClearPath: The Cash Rewards Card is here. 0% intro APR plus 2% cash back on everything, with no annual fee. Apply in 2 min: clearpath.example/cr",
+  "expected_rule_codes": [
+    "CARD-INTRO",
+    "SMS-CONSENT"
+  ],
+  "not_expected_rule_codes": [
+    "APPROVAL-CLAIMS",
+    "OFFER-MATCH",
+    "HIDDEN-TEXT",
+    "EQUAL-HOUSING"
+  ],
+  "sample_chip": false,
+  "notes": "'0% intro APR' with no period, no go-to rate and no transaction type; no STOP or rates line. CARD-TRIGGER may also fire (an APR and a fee are stated with no purchase APR), which is acceptable."
+}

@@ -1,0 +1,21 @@
+{
+  "key": "display-payment-v1",
+  "title": "'Just $189/month' display banner (V1)",
+  "product": "personal_loan",
+  "channel": "display",
+  "format": "text",
+  "text": "One simple payment.\n\nJust $189/month.*\n\nRates as low as 8.99%. Instant approval. Apply today.\n\n*Example for illustration.",
+  "expected_rule_codes": [
+    "TRIGGER-CLOSED",
+    "APPROVAL-CLAIMS",
+    "APR-TERM"
+  ],
+  "not_expected_rule_codes": [
+    "OFFER-MATCH",
+    "EQUAL-HOUSING",
+    "CARD-INTRO",
+    "HIDDEN-TEXT"
+  ],
+  "sample_chip": false,
+  "notes": "Revision pair, V1: a payment amount with no amount, term or APR; a rate with no 'APR' (8.99% itself matches PL-1, so no offer mismatch); and 'Instant approval'. The footnote says nothing. See display-payment-v2."
+}

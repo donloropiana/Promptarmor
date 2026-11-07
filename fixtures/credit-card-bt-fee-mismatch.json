@@ -1,0 +1,19 @@
+{
+  "key": "credit-card-bt-fee-mismatch",
+  "title": "Balance transfer post with '$0 balance transfer fee'",
+  "product": "credit_card",
+  "channel": "paid_social",
+  "format": "text",
+  "text": "Still paying interest on last year's balance?\n\nMove it to the ClearPath Balance Transfer Card: 0% intro APR on balance transfers for 18 months, then 18.99% to 27.99% variable APR. $0 balance transfer fee. No annual fee.\n\nTransfer in minutes: clearpath.example/bt",
+  "expected_rule_codes": [
+    "OFFER-MATCH"
+  ],
+  "not_expected_rule_codes": [
+    "CARD-INTRO",
+    "CARD-TRIGGER",
+    "APPROVAL-CLAIMS",
+    "HIDDEN-TEXT"
+  ],
+  "sample_chip": false,
+  "notes": "The intro sentence is complete and matches CC-2, but CC-2 charges a 3% balance transfer fee ($5 minimum), so '$0 balance transfer fee' is a fee mismatch."
+}

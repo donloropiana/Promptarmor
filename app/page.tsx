@@ -1,26 +1,20 @@
-import { ShieldCheckIcon } from "lucide-react";
-import {
-  Card,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { redirect } from "next/navigation";
+import { Suspense } from "react";
 
-// Temporary placeholder until the review queue lands; also smoke-tests the
-// shadcn theme, Geist font, and lucide icons in production builds.
+import { ShellSkeleton } from "@/components/shell/shell-skeleton";
+import { getCurrentUser } from "@/lib/auth/dal";
+
+/** "/" has no content of its own: signed in -> the Ads list, else sign-in. */
 export default function Home() {
   return (
-    <main className="flex flex-1 items-center justify-center p-6">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <ShieldCheckIcon className="size-6 text-muted-foreground" />
-          <CardTitle>Marketing Compliance Workbench</CardTitle>
-          <CardDescription>
-            AI-assisted compliance review for marketing materials. Under
-            construction.
-          </CardDescription>
-        </CardHeader>
-      </Card>
-    </main>
+    <Suspense fallback={<ShellSkeleton />}>
+      <HomeRedirect />
+    </Suspense>
   );
+}
+
+async function HomeRedirect() {
+  const user = await getCurrentUser();
+  redirect(user ? "/ads" : "/signin");
+  return null;
 }

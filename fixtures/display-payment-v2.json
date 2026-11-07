@@ -1,0 +1,20 @@
+{
+  "key": "display-payment-v2",
+  "title": "'Just $189/month' display banner (V2)",
+  "product": "personal_loan",
+  "channel": "display",
+  "format": "text",
+  "text": "One simple payment.\n\nJust $189/month.*\n\nNo origination fee. Apply today.\n\n*Example: a $5,000 loan repaid in 36 monthly payments of $188.99 has a 21.24% APR. Rates from 8.99% to 24.99% APR.",
+  "expected_rule_codes": [
+    "OFFER-MATCH"
+  ],
+  "not_expected_rule_codes": [
+    "TRIGGER-CLOSED",
+    "APPROVAL-CLAIMS",
+    "APR-TERM",
+    "EQUAL-HOUSING",
+    "HIDDEN-TEXT"
+  ],
+  "sample_chip": false,
+  "notes": "Revision pair, V2 of display-payment-v1: the trigger-term disclosures are complete (fixed), the rate is stated as an APR (fixed) and 'Instant approval' is gone (fixed), but 'No origination fee' is new and false (PL-1 charges 1% to 5%). The example's payment is computed from the stated APR with no fee, so it is internally consistent."
+}

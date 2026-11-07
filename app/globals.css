@@ -131,3 +131,15 @@
     @apply font-sans;
   }
 }
+/* Respect the OS "reduce motion" setting: enter/exit animations and
+   transitions finish at once (spinners keep turning so loading still reads). */
+@media (prefers-reduced-motion: reduce) {
+  *:not([data-slot="spinner"]),
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

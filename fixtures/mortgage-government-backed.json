@@ -1,0 +1,20 @@
+{
+  "key": "mortgage-government-backed",
+  "title": "'Government-backed low rates' refinance mailer",
+  "product": "mortgage",
+  "channel": "direct_mail",
+  "format": "text",
+  "text": "IMPORTANT NOTICE REGARDING YOUR HOME LOAN\n\nHomeowners in your county may qualify for government-backed low rates under the 2026 Homeowner Relief Program. ClearPath Financial has been authorized to process applications in your area.\n\nLower your monthly payment. Skip up to two payments. No appraisal required for qualified borrowers.\n\nCall 1-800-555-0142 before November 30 to claim your reduced rate. You have been selected based on public records.\n\nClearPath Financial. Equal Housing Lender. NMLS #000000.",
+  "expected_rule_codes": [
+    "MORTGAGE-MISLEAD"
+  ],
+  "not_expected_rule_codes": [
+    "EQUAL-HOUSING",
+    "MORTGAGE-RATE-PAYMENT",
+    "OFFER-MATCH",
+    "TRIGGER-CLOSED",
+    "HIDDEN-TEXT"
+  ],
+  "sample_chip": false,
+  "notes": "Implies a government program and official authorization (Reg N 1014.3(n), Reg Z 1026.24(i)(3)); 'Skip up to two payments' misrepresents payment timing; 'You have been selected' implies a credit decision. No numbers, so no rate or offer issues."
+}

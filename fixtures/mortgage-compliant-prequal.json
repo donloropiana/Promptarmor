@@ -1,0 +1,20 @@
+{
+  "key": "mortgage-compliant-prequal",
+  "title": "Mortgage prequalification landing page (compliant)",
+  "product": "mortgage",
+  "channel": "landing_page",
+  "format": "text",
+  "text": "Get prequalified for a 30-year fixed mortgage\n\nSee what you could afford in about 10 minutes. A prequalification is not a commitment to lend and does not affect your credit score.\n\nToday's example rate: 6.625% (6.74% APR)\n\nBased on a $400,000 conventional 30-year fixed loan with 20% down, a 740 or higher credit score and 0.5 discount points, as of November 3, 2026. Principal and interest $2,561 per month for 360 months. The payment excludes taxes and insurance, so your actual payment will be higher. Rates change daily and depend on your credit, down payment and loan amount. Conforming loans up to $806,500. Minimum down payment 3%; mortgage insurance applies below 20% down.\n\nStart my prequalification\n\nClearPath Financial is a private lender, not a government agency. Equal Housing Lender. NMLS #000000.",
+  "expected_rule_codes": [],
+  "not_expected_rule_codes": [
+    "EQUAL-HOUSING",
+    "MORTGAGE-RATE-PAYMENT",
+    "OFFER-MATCH",
+    "APPROVAL-CLAIMS",
+    "TRIGGER-CLOSED",
+    "MORTGAGE-MISLEAD",
+    "SUPERLATIVE-CLAIMS"
+  ],
+  "sample_chip": false,
+  "notes": "Every number matches MG-1; the payment example carries amount, term, rate, APR, assumptions and the taxes-and-insurance note; legend and NMLS present. Expect zero issues (false-positive check)."
+}

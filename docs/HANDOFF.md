@@ -19,6 +19,7 @@ A multi-tenant review desk for marketing that has to follow the law. Lenders (pe
 - Sign-in: email magic link + 6-digit code, and email + password. **No Google/Microsoft sign-in buttons** (a `signInWithGoogle` action/button currently exists in `app/(auth)/signin`; remove it).
 - AI: **Vercel AI Gateway** (use the `ai` package with gateway model strings; on Vercel it authenticates via OIDC automatically, no key needed). AI never approves. "Ask about this ad" exists ONLY on the ad page (read-only, no tools, plain text, no history). No global chat.
 - Budget: $10/day global AI cap with per-workspace caps, enforced in the database (`reserve_ai_budget` / `settle_ai_budget`).
+- Models (Max, 2026-11-07): cheapest capable model everywhere by default: `anthropic/claude-haiku-5.5` for checks, classification, extraction and chat. Never Opus. A stronger check model only behind `AI_CHECK_MODEL` (unset = Haiku). Arrivals are classified by keywords first; a model sees only ambiguous items. Rates/fees are checked in code against product terms. Identical content reuses previous findings at $0. Show cost per check in the UI.
 - Words in UI: ad (not asset), workspace (not profile), issue (not finding), check (not preflight), Products, Connected accounts, Changes requested.
 
 ## Infrastructure facts

@@ -6,7 +6,7 @@ import { z } from "zod";
 
 import { getCurrentUser } from "@/lib/auth/dal";
 import { getRequestOrigin } from "@/lib/auth/origin";
-import { safeNextPath, signInPath } from "@/lib/auth/redirect";
+import { safeNextPath } from "@/lib/auth/redirect";
 import { deleteUnconfirmedPasswordUser } from "@/lib/auth/unconfirmed";
 import { createClient } from "@/lib/supabase/server";
 
@@ -84,27 +84,6 @@ async function client(): Promise<SupabaseClient | null> {
   } catch {
     return null;
   }
-}
-
-/** Starts Google OAuth (PKCE). Redirects to Google, then /auth/callback. */
-export async function signInWithGoogle(formData: FormData): Promise<void> {
-  const next = safeNextPath(formData.get("next"));
-  const supabase = await client();
-  if (!supabase) redirect(signInPath(next, "config"));
-
-  const origin = await getRequestOrigin();
-  const { data, error } = await supabase.auth.signInWithOAuth({
-    provider: "google",
-    options: {
-      redirectTo: `${origin}/auth/callback?next=${encodeURIComponent(next)}`,
-      queryParams: { prompt: "select_account" },
-    },
-  });
-  if (error || !data?.url) {
-    console.warn("[signin] google oauth start failed:", error?.code ?? error?.status);
-    redirect(signInPath(next, "oauth"));
-  }
-  redirect(data.url);
 }
 
 /**

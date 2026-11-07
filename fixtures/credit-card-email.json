@@ -1,0 +1,31 @@
+{
+  "key": "credit-card-email",
+  "title": "0% intro APR. No annual fee ever. (Cash Rewards Card email)",
+  "product": "credit_card",
+  "channel": "email",
+  "format": "html",
+  "text": "ClearPath Financial\n\n0% intro APR. No annual fee ever.\n\nMeet the ClearPath Cash Rewards Card. Pay no interest on purchases with our 0% intro APR, earn 2% cash back on everything you buy, and never pay an annual fee.\n\nNo categories to track. No caps on what you can earn. Just a simple card that pays you back.\n\nApply in 2 minutes\n\nPurchase APR 19.99% to 28.99% variable, based on your creditworthiness and the Prime Rate. Balance transfer fee 3% of each transfer ($5 minimum). Late fee up to $40. Subject to credit approval. ClearPath Financial, 100 Market St, Austin, TX 78701. Unsubscribe.",
+  "html": "<!doctype html>\n<html>\n<body style=\"margin:0;background:#f4f5f7;font-family:Helvetica,Arial,sans-serif;color:#1a1a1a\">\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\">\n<tr><td align=\"center\" style=\"padding:24px 12px\">\n<table role=\"presentation\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#ffffff;border-radius:8px\">\n<tr><td style=\"padding:32px 32px 8px;font-size:13px;color:#555555\">ClearPath Financial</td></tr>\n<tr><td style=\"padding:0 32px\"><h1 style=\"margin:0 0 12px;font-size:30px;line-height:1.2\">0% intro APR. No annual fee ever.</h1></td></tr>\n<tr><td style=\"padding:0 32px;font-size:16px;line-height:1.5\">\n<p>Meet the ClearPath Cash Rewards Card. Pay no interest on purchases with our 0% intro APR, earn 2% cash back on everything you buy, and never pay an annual fee.</p>\n<p>No categories to track. No caps on what you can earn. Just a simple card that pays you back.</p>\n<p style=\"margin:24px 0\"><a href=\"https://clearpath.example/cash-rewards\" style=\"display:inline-block;background:#0e3b43;color:#ffffff;padding:14px 24px;border-radius:6px;text-decoration:none;font-weight:bold\">Apply in 2 minutes</a></p>\n</td></tr>\n<tr><td style=\"padding:16px 32px 32px;font-size:9px;line-height:1.3;color:#9a9a9a\">Purchase APR 19.99% to 28.99% variable, based on your creditworthiness and the Prime Rate. Balance transfer fee 3% of each transfer ($5 minimum). Late fee up to $40. Subject to credit approval. ClearPath Financial, 100 Market St, Austin, TX 78701. Unsubscribe.</td></tr>\n</table>\n</td></tr>\n</table>\n</body>\n</html>",
+  "revision": "ClearPath Financial\n\n0% intro APR on purchases for 12 months. No annual fee ever.\n\nMeet the ClearPath Cash Rewards Card. Pay no interest on purchases with our 0% intro APR for 12 months, then 19.99% to 28.99% variable APR based on your creditworthiness. Earn 2% cash back on everything you buy, and never pay an annual fee.\n\nNo categories to track. No caps on what you can earn. Just a simple card that pays you back.\n\nApply in 2 minutes\n\nPurchase APR 19.99% to 28.99% variable, based on your creditworthiness and the Prime Rate. Balance transfer fee 3% of each transfer ($5 minimum). Late fee up to $40. Subject to credit approval. ClearPath Financial, 100 Market St, Austin, TX 78701. Unsubscribe.",
+  "revision_html": "<!doctype html>\n<html>\n<body style=\"margin:0;background:#f4f5f7;font-family:Helvetica,Arial,sans-serif;color:#1a1a1a\">\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\">\n<tr><td align=\"center\" style=\"padding:24px 12px\">\n<table role=\"presentation\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#ffffff;border-radius:8px\">\n<tr><td style=\"padding:32px 32px 8px;font-size:13px;color:#555555\">ClearPath Financial</td></tr>\n<tr><td style=\"padding:0 32px\"><h1 style=\"margin:0 0 12px;font-size:30px;line-height:1.2\">0% intro APR on purchases for 12 months. No annual fee ever.</h1></td></tr>\n<tr><td style=\"padding:0 32px;font-size:16px;line-height:1.5\">\n<p>Meet the ClearPath Cash Rewards Card. Pay no interest on purchases with our 0% intro APR for 12 months, then 19.99% to 28.99% variable APR based on your creditworthiness. Earn 2% cash back on everything you buy, and never pay an annual fee.</p>\n<p>No categories to track. No caps on what you can earn. Just a simple card that pays you back.</p>\n<p style=\"margin:24px 0\"><a href=\"https://clearpath.example/cash-rewards\" style=\"display:inline-block;background:#0e3b43;color:#ffffff;padding:14px 24px;border-radius:6px;text-decoration:none;font-weight:bold\">Apply in 2 minutes</a></p>\n</td></tr>\n<tr><td style=\"padding:16px 32px 32px;font-size:13px;line-height:1.5;color:#444444\">Purchase APR 19.99% to 28.99% variable, based on your creditworthiness and the Prime Rate. Balance transfer fee 3% of each transfer ($5 minimum). Late fee up to $40. Subject to credit approval. ClearPath Financial, 100 Market St, Austin, TX 78701. Unsubscribe.</td></tr>\n</table>\n</td></tr>\n</table>\n</body>\n</html>",
+  "expected_rule_codes": [
+    "CARD-INTRO",
+    "CLEAR-CONSPIC"
+  ],
+  "not_expected_rule_codes": [
+    "OFFER-MATCH",
+    "APPROVAL-CLAIMS",
+    "HIDDEN-TEXT",
+    "CARD-TRIGGER",
+    "TRIGGER-CLOSED"
+  ],
+  "revision_expected_rule_codes": [],
+  "revision_not_expected_rule_codes": [
+    "CARD-INTRO",
+    "CLEAR-CONSPIC",
+    "OFFER-MATCH",
+    "CARD-TRIGGER"
+  ],
+  "sample_chip": true,
+  "notes": "The headline and body say '0% intro APR' with no period and no go-to rate near it; the go-to APR exists only in a 9px #9a9a9a footer (clear-and-conspicuous). 'No annual fee ever' matches CC-1 (annual fee $0) so it is fine. The revision adds 'for 12 months, then 19.99% to 28.99% variable APR' in the body and makes the footer 13px #444444."
+}

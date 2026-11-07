@@ -3,6 +3,7 @@ import "server-only";
 import { createServerClient } from "@supabase/ssr";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
+import { connection } from "next/server";
 
 import { getPublicSupabaseEnv } from "./env";
 import type { Database } from "./types";
@@ -27,12 +28,19 @@ export class SupabaseNotConfiguredError extends Error {
  * it must render inside <Suspense>. Cookie writes from a Server Component
  * are ignored (the proxy refreshes the session instead).
  *
+ * Waits for a real request first: the runtime-prefetch (App Shell) render
+ * lets cookies() resolve, and the session checks that follow (token expiry
+ * in supabase-js, `exp` in jose) read Date.now(), which Next flags as an
+ * unstable value while prerendering. connection() suspends that render so
+ * session-dependent UI streams in at navigation instead.
+ *
  * @throws SupabaseNotConfiguredError when env is missing.
  */
 export async function createClient(): Promise<SupabaseClient<Database>> {
   const env = getPublicSupabaseEnv();
   if (!env) throw new SupabaseNotConfiguredError();
 
+  await connection();
   const cookieStore = await cookies();
 
   return createServerClient<Database>(env.url, env.publishableKey, {

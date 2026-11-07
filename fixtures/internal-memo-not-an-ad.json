@@ -1,0 +1,21 @@
+{
+  "key": "internal-memo-not-an-ad",
+  "title": "Internal memo: Q1 creative calendar (not an ad)",
+  "product": "other",
+  "channel": "internal",
+  "format": "text",
+  "text": "To: Marketing team\nFrom: Priya Natarajan, Compliance\nRe: Q1 creative calendar and review windows\n\nThanks for sending the Q1 plan. Three notes before we lock dates:\n\n1. Every creative needs to be in the review desk at least five business days before its launch date. Social posts count, including reposts of older creative.\n2. If product terms change in January, approved ads that quote rates come back for review automatically. Plan a buffer week after the rate committee meets.\n3. Keep the ClearPath brand creative and the affiliate program creative in separate campaigns so we can report on them separately.\n\nReply with any date changes by Friday. The calendar is in the shared drive under Marketing / 2027 / Q1.",
+  "expected_rule_codes": [],
+  "not_expected_rule_codes": [
+    "OFFER-MATCH",
+    "TRIGGER-CLOSED",
+    "APPROVAL-CLAIMS",
+    "HIDDEN-TEXT",
+    "CARD-TRIGGER",
+    "SUPERLATIVE-CLAIMS",
+    "DEBT-SAVINGS",
+    "AFFILIATE-DISCLOSE"
+  ],
+  "sample_chip": false,
+  "notes": "Not marketing. The intake classifier should mark it not_marketing; if it is checked anyway, it must produce no findings."
+}

@@ -1,9 +1,9 @@
 "use client";
 
 import { useActionState, useState, type ReactNode } from "react";
-import { useFormStatus } from "react-dom";
 
 import { AuthShell } from "@/components/auth/auth-shell";
+import { Wordmark } from "@/components/shell/wordmark";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,7 +11,6 @@ import {
   FieldDescription,
   FieldGroup,
   FieldLabel,
-  FieldSeparator,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
@@ -20,7 +19,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   requestPasswordReset,
   sendEmailCode,
-  signInWithGoogle,
   signInWithPassword,
   signUpWithPassword,
   verifyEmailCode,
@@ -38,11 +36,12 @@ export function SignInForm({
 }) {
   return (
     <AuthShell
+      brand={<Wordmark />}
       title={invited ? "Sign in to accept your invitation" : "Sign in"}
       description={
         invited
           ? "Use the email address the invitation was sent to."
-          : "Marketing Compliance Workbench"
+          : "Review every ad before it runs. New here? Sign in with your work email and we'll create your account."
       }
       footer="By continuing you agree to use this workspace for authorized review work only."
     >
@@ -51,13 +50,6 @@ export function SignInForm({
           <AlertDescription>{errorMessage}</AlertDescription>
         </Alert>
       ) : null}
-
-      <form action={signInWithGoogle}>
-        <input type="hidden" name="next" value={next} />
-        <GoogleButton />
-      </form>
-
-      <FieldSeparator>or</FieldSeparator>
 
       <Tabs defaultValue="email">
         <TabsList className="w-full">
@@ -72,39 +64,6 @@ export function SignInForm({
         </TabsContent>
       </Tabs>
     </AuthShell>
-  );
-}
-
-function GoogleButton() {
-  const { pending } = useFormStatus();
-  return (
-    <Button type="submit" variant="outline" size="lg" className="w-full" disabled={pending}>
-      {pending ? <Spinner /> : <GoogleMark />}
-      Continue with Google
-    </Button>
-  );
-}
-
-function GoogleMark() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="size-4">
-      <path
-        fill="#4285F4"
-        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1Z"
-      />
-      <path
-        fill="#34A853"
-        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A11 11 0 0 0 12 23Z"
-      />
-      <path
-        fill="#FBBC05"
-        d="M5.84 14.1A6.6 6.6 0 0 1 5.5 12c0-.73.13-1.44.34-2.1V7.06H2.18A11 11 0 0 0 1 12c0 1.77.43 3.45 1.18 4.94l3.66-2.84Z"
-      />
-      <path
-        fill="#EA4335"
-        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15A10.96 10.96 0 0 0 12 1 11 11 0 0 0 2.18 7.06l3.66 2.84C6.71 7.31 9.14 5.38 12 5.38Z"
-      />
-    </svg>
   );
 }
 

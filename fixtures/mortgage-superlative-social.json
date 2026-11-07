@@ -1,0 +1,21 @@
+{
+  "key": "mortgage-superlative-social",
+  "title": "'Lowest mortgage rates in Texas. Guaranteed.' post",
+  "product": "mortgage",
+  "channel": "paid_social",
+  "format": "text",
+  "text": "Lowest mortgage rates in Texas. Guaranteed.\n\nBuying this spring? ClearPath Home Loans gets you pre-approved in 24 hours so you can make an offer with confidence.\n\nMessage us to get started.\n\nClearPath Financial. Equal Housing Lender. NMLS #000000.",
+  "expected_rule_codes": [
+    "SUPERLATIVE-CLAIMS",
+    "APPROVAL-CLAIMS"
+  ],
+  "not_expected_rule_codes": [
+    "EQUAL-HOUSING",
+    "MORTGAGE-RATE-PAYMENT",
+    "OFFER-MATCH",
+    "TRIGGER-CLOSED",
+    "HIDDEN-TEXT"
+  ],
+  "sample_chip": false,
+  "notes": "'Lowest rates ... Guaranteed' is an unsubstantiated superlative; 'pre-approved in 24 hours' promises a credit decision for a product that only prequalifies. No numbers, so no rate or offer issues."
+}

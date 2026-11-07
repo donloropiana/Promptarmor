@@ -1,0 +1,20 @@
+{
+  "key": "debt-consolidation-savings",
+  "title": "'Customers save an average of $4,200' consolidation email",
+  "product": "personal_loan",
+  "channel": "email",
+  "format": "text",
+  "text": "Subject: Say goodbye to credit card interest\n\nHi Jordan,\n\nCarrying balances on three or four cards means paying three or four different interest rates. A ClearPath Personal Loan rolls them into one fixed monthly payment at a rate from 8.99% to 24.99% APR.\n\nClearPath customers who consolidate save an average of $4,200 in interest and pay off their debt 3x faster.\n\nBorrow $2,000 to $40,000. No prepayment penalty. Check your rate in 2 minutes without affecting your credit score.\n\nSee my rate\n\nClearPath Financial, 100 Market St, Austin, TX 78701. Unsubscribe.",
+  "expected_rule_codes": [
+    "DEBT-SAVINGS"
+  ],
+  "not_expected_rule_codes": [
+    "OFFER-MATCH",
+    "TRIGGER-CLOSED",
+    "APPROVAL-CLAIMS",
+    "APR-TERM",
+    "HIDDEN-TEXT"
+  ],
+  "sample_chip": false,
+  "notes": "An average-savings figure and a '3x faster' payoff claim with no basis, sample or assumptions. Rates and amounts match PL-1 and there is no trigger term."
+}

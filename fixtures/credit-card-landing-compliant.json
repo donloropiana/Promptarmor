@@ -1,0 +1,20 @@
+{
+  "key": "credit-card-landing-compliant",
+  "title": "Cash Rewards Card landing page (compliant)",
+  "product": "credit_card",
+  "channel": "landing_page",
+  "format": "text",
+  "text": "ClearPath Cash Rewards Card\n\n2% cash back on every purchase. No categories, no caps, no annual fee.\n\n0% intro APR on purchases for 12 months, then a variable APR of 19.99% to 28.99% based on your creditworthiness and the Prime Rate.\n\nBalance transfer fee: 3% of each transfer, $5 minimum. Late fee: up to $40. Subject to credit approval.\n\nApply in 2 minutes. Approval depends on your credit and income.\n\nApply now",
+  "expected_rule_codes": [],
+  "not_expected_rule_codes": [
+    "CARD-INTRO",
+    "CARD-TRIGGER",
+    "OFFER-MATCH",
+    "CLEAR-CONSPIC",
+    "APPROVAL-CLAIMS",
+    "APR-TERM",
+    "HIDDEN-TEXT"
+  ],
+  "sample_chip": false,
+  "notes": "Every element of 1026.16(b) and (g) is present at body size and the numbers match CC-1. Expect zero issues (false-positive check)."
+}

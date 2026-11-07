@@ -1,0 +1,21 @@
+{
+  "key": "personal-loan-banner-compliant",
+  "title": "Personal loan display banner (compliant)",
+  "product": "personal_loan",
+  "channel": "display",
+  "format": "text",
+  "text": "ClearPath Personal Loan\n\nFixed rates from 8.99% to 24.99% APR\n\nCheck your rate in 2 minutes. Checking won't affect your credit score.\n\nCheck my rate",
+  "expected_rule_codes": [],
+  "not_expected_rule_codes": [
+    "OFFER-MATCH",
+    "TRIGGER-CLOSED",
+    "APPROVAL-CLAIMS",
+    "APR-TERM",
+    "RATE-FIXED",
+    "DEBT-SAVINGS",
+    "CLEAR-CONSPIC",
+    "HIDDEN-TEXT"
+  ],
+  "sample_chip": false,
+  "notes": "The APR range equals PL-1, 'fixed' is accurate for a closed-end fixed-rate loan, and there is no trigger term. Expect zero issues (the key false-positive check)."
+}

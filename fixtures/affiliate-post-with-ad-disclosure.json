@@ -1,0 +1,20 @@
+{
+  "key": "affiliate-post-with-ad-disclosure",
+  "title": "Affiliate post with a clear #ad disclosure (compliant)",
+  "product": "personal_loan",
+  "channel": "affiliate",
+  "format": "text",
+  "text": "#ad | Sponsored by ClearPath Financial. We earn a commission if you apply through our links.\n\nI consolidated three cards into one ClearPath Personal Loan last spring, and the thing I appreciated most was knowing the payment on day one. Here is what to check before you apply anywhere:\n\n1. The APR range. ClearPath's is 8.99% to 24.99% APR, fixed for the term of the loan. Where you land depends on your credit and income.\n2. Fees. ClearPath charges an origination fee of 1% to 5%, taken out of the loan before it is sent to you. There is no prepayment penalty.\n3. Amount and term. $2,000 to $40,000, 24 to 60 months.\n\nChecking your rate is a soft inquiry, so it does not affect your credit score. Approval depends on your credit and income.\n\nCheck your rate at ClearPath (affiliate link)",
+  "expected_rule_codes": [],
+  "not_expected_rule_codes": [
+    "AFFILIATE-DISCLOSE",
+    "HIDDEN-TEXT",
+    "APPROVAL-CLAIMS",
+    "OFFER-MATCH",
+    "TRIGGER-CLOSED",
+    "RATE-FIXED",
+    "SUPERLATIVE-CLAIMS"
+  ],
+  "sample_chip": false,
+  "notes": "The paid relationship is disclosed at the top in plain words; every term matches PL-1; the term range appears with the APR range. Expect zero issues (false-positive check for affiliate content)."
+}

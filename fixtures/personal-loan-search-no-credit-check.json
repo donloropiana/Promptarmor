@@ -1,0 +1,20 @@
+{
+  "key": "personal-loan-search-no-credit-check",
+  "title": "Paid search ad: 'No Credit Check | Instant Approval'",
+  "product": "personal_loan",
+  "channel": "paid_search",
+  "format": "text",
+  "text": "Personal Loans - No Credit Check | Instant Approval | ClearPath\nAd - clearpath.example/loans\nRates from 8.99% APR. Borrow $2,000 to $40,000. Get your money as soon as the next business day.",
+  "expected_rule_codes": [
+    "APPROVAL-CLAIMS"
+  ],
+  "not_expected_rule_codes": [
+    "OFFER-MATCH",
+    "TRIGGER-CLOSED",
+    "APR-TERM",
+    "HIDDEN-TEXT",
+    "AFFILIATE-DISCLOSE"
+  ],
+  "sample_chip": false,
+  "notes": "Headline approval claims in a search ad. The rate, amounts and funding time all match PL-1."
+}

@@ -1,0 +1,19 @@
+{
+  "key": "credit-card-intro-missing-variable",
+  "title": "Cash Rewards Card banner missing 'variable'",
+  "product": "credit_card",
+  "channel": "display",
+  "format": "text",
+  "text": "ClearPath Cash Rewards Card\n\n0% intro APR on purchases for 12 months, then 19.99% to 28.99% APR.\n\n2% cash back on everything. No annual fee.\n\nApply now",
+  "expected_rule_codes": [
+    "CARD-TRIGGER"
+  ],
+  "not_expected_rule_codes": [
+    "CARD-INTRO",
+    "OFFER-MATCH",
+    "APPROVAL-CLAIMS",
+    "HIDDEN-TEXT"
+  ],
+  "sample_chip": false,
+  "notes": "The intro rate is complete (label, period, go-to APR, purchases) and the numbers match CC-1. The go-to APR is variable but the ad never says so (12 CFR 1026.16(b)(1)(ii))."
+}

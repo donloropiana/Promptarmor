@@ -1,0 +1,20 @@
+{
+  "key": "mortgage-missing-equal-housing",
+  "title": "30-year fixed banner with no Equal Housing legend",
+  "product": "mortgage",
+  "channel": "display",
+  "format": "text",
+  "text": "ClearPath Home Loans\n\n30-year fixed from 6.625% rate / 6.74% APR\n\nExample based on a $400,000 loan with 20% down, a 740 or higher credit score and 0.5 discount points as of November 3, 2026. Rates subject to change. A prequalification is not a commitment to lend.\n\nGet prequalified in minutes\n\nClearPath Financial NMLS #000000",
+  "expected_rule_codes": [
+    "EQUAL-HOUSING"
+  ],
+  "not_expected_rule_codes": [
+    "MORTGAGE-RATE-PAYMENT",
+    "OFFER-MATCH",
+    "APPROVAL-CLAIMS",
+    "MORTGAGE-MISLEAD",
+    "TRIGGER-CLOSED"
+  ],
+  "sample_chip": false,
+  "notes": "Rate, APR and assumptions match MG-1 and are complete. The only issue is the missing Equal Housing Lender legend (the NMLS id is present)."
+}
