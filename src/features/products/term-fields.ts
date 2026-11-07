@@ -1,4 +1,4 @@
-import type { OfferTerms } from "@/features/rules/server/queries";
+import type { OfferTerms } from "@/features/products/server/queries";
 
 /**
  * The product term fields the UI knows how to render and edit. Terms are

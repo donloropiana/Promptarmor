@@ -8,7 +8,7 @@ import { PRODUCT_TYPES } from "@/features/products/catalog";
 import { TERM_FIELDS } from "@/features/products/term-fields";
 import { SIGNED_OUT, invalid, type ActionResult as SharedActionResult } from "@/lib/action-result";
 import { getMembershipRole } from "@/features/auth/server/dal";
-import { getApprovedAdsUsingOfferVersion, type AffectedAd } from "@/features/rules/server/queries";
+import { getApprovedAdsUsingOfferVersion, type AffectedAd } from "./queries";
 import { requireSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getSupabaseContext, type AppSupabaseContext } from "@/lib/supabase/context";
 import type { Json } from "@/lib/supabase/types";

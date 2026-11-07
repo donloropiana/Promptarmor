@@ -1,7 +1,8 @@
 import { BookOpenCheckIcon, PackageIcon } from "lucide-react";
 
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
-import type { WorkspaceOffer, WorkspaceRule } from "@/features/rules/server/queries";
+import type { WorkspaceOffer } from "@/features/products/server/queries";
+import type { WorkspaceRule } from "@/features/rules/server/queries";
 
 import { ProductCard } from "@/features/products/components/product-card";
 import { RuleCard } from "./rule-card";

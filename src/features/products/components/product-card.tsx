@@ -6,7 +6,7 @@ import { useState } from "react";
 import { shortDate } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import type { WorkspaceOffer } from "@/features/rules/server/queries";
+import type { WorkspaceOffer } from "@/features/products/server/queries";
 import { PRODUCT_LABELS } from "@/features/products/catalog";
 import { cn } from "@/lib/utils";
 

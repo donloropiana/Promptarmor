@@ -20,7 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Spinner } from "@/components/ui/spinner";
 import { editOffer, previewOfferChange, type OfferChangePreview } from "@/features/products/server/actions";
-import type { WorkspaceOffer } from "@/features/rules/server/queries";
+import type { WorkspaceOffer } from "@/features/products/server/queries";
 
 import { ProductTermFields, type TermFormValues } from "./product-term-fields";
 import { fieldsForEdit, TERM_FIELDS, termInputValue } from "@/features/products/term-fields";

@@ -3,7 +3,7 @@
 import { dateTime, shortDate } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import type { OfferVersion, WorkspaceOffer } from "@/features/rules/server/queries";
+import type { OfferVersion, WorkspaceOffer } from "@/features/products/server/queries";
 
 import { Redline, ValueChange } from "@/components/redline";
 import { TERM_FIELDS, formatTerm } from "@/features/products/term-fields";

@@ -8,7 +8,8 @@ import { RulesTabs, type RulesTab } from "@/features/rules/components/rules-tabs
 import { PageHeader } from "@/components/layout/page-header";
 import { PageSkeleton } from "@/components/layout/shell-skeleton";
 import { getActiveProfileId } from "@/features/auth/server/dal";
-import { getReferenceLibrary, getWorkspaceOffers, getWorkspaceRules } from "@/features/rules/server/queries";
+import { getReferenceLibrary, getWorkspaceRules } from "@/features/rules/server/queries";
+import { getWorkspaceOffers } from "@/features/products/server/queries";
 
 export const metadata: Metadata = { title: "Rules · Marketing Compliance Workbench" };
 // Reads the session (see src/app/(app)/layout.tsx), so it blocks on the server by design.
