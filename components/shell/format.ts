@@ -1,7 +1,9 @@
 /**
  * Small, dependency-free formatters shared by the shell, Rules and Settings.
- * Safe on the server and in the browser.
+ * Safe on the server and in the browser: every date is printed in
+ * APP_TIME_ZONE so both sides produce the same text.
  */
+import { APP_TIME_ZONE } from "@/lib/time-zone";
 
 /** "just now", "4 min ago", "2 h ago", "3 d ago", else a short date. */
 export function timeAgo(iso: string | null | undefined, now: number = Date.now()): string {
@@ -26,7 +28,7 @@ export function timeAgo(iso: string | null | undefined, now: number = Date.now()
  * builds otherwise insert "at" and cause hydration mismatches.
  */
 function fmtParts(d: Date, o: Intl.DateTimeFormatOptions): string {
-  const parts = new Intl.DateTimeFormat("en-US", o).formatToParts(d);
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: APP_TIME_ZONE, ...o }).formatToParts(d);
   const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
   const date = `${get("month")} ${get("day")}${get("year") ? `, ${get("year")}` : ""}`;
   if (!o.hour) return date;
@@ -35,24 +37,18 @@ function fmtParts(d: Date, o: Intl.DateTimeFormatOptions): string {
 
 const DATE_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/;
 
-/**
- * Parses an ISO timestamp, or a date-only value ("2026-11-07", a Postgres
- * `date`) as a calendar day in the viewer's time zone rather than UTC
- * midnight, which would show as the previous day anywhere west of Greenwich.
- */
-function toDate(iso: string): Date | null {
-  const m = DATE_ONLY.exec(iso);
-  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-  const t = Date.parse(iso);
-  return Number.isFinite(t) ? new Date(t) : null;
-}
-
-/** "Nov 6, 2026" in the viewer's locale. */
+/** "Nov 6, 2026". A date-only value ("2026-11-07", a Postgres `date`) is a
+ * calendar day and is printed as-is, never shifted by a time zone. */
 export function shortDate(iso: string | null | undefined): string {
   if (!iso) return "—";
-  const d = toDate(iso);
-  if (!d) return "—";
-  return fmtParts(d, { month: "short", day: "numeric", year: "numeric" });
+  const m = DATE_ONLY.exec(iso);
+  if (m) {
+    const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+    return fmtParts(d, { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+  }
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return "—";
+  return fmtParts(new Date(t), { month: "short", day: "numeric", year: "numeric" });
 }
 
 /** "Nov 6, 2026, 3:04 PM". */

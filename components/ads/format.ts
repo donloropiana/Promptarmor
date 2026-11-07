@@ -1,3 +1,5 @@
+import { APP_TIME_ZONE } from "@/lib/time-zone";
+
 /**
  * Pure helpers shared by the Ads list, the Ad page and lib/data/ads.ts.
  * No "use client", no server-only imports: safe on both sides.
@@ -149,7 +151,7 @@ export function formatDateTime(iso: string | null | undefined, opts: { timeZone?
     hour: "numeric",
     minute: "2-digit",
     hour12: true,
-    timeZone: opts.timeZone,
+    timeZone: opts.timeZone ?? APP_TIME_ZONE,
   }).formatToParts(d);
   const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
   const year = get("year");

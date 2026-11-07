@@ -7,16 +7,15 @@ import { formatDateTime } from "./format";
 const subscribe = () => () => {};
 
 /**
- * Absolute times in the viewer's own zone without a hydration mismatch: the
- * server (UTC on Vercel) renders "Nov 7, 2:07 AM UTC"; after hydration the
- * browser swaps in its local "Nov 6, 8:07 PM". Relative ages should use the
- * server's `now` instead (see relativeTime).
+ * Absolute times, identical on the server and in the browser because
+ * formatDateTime pins APP_TIME_ZONE. Kept as a hook so a per-viewer zone can
+ * be reintroduced later without touching call sites.
  */
 export function useLocalDateTime(iso: string | null | undefined): string {
   return useSyncExternalStore(
     subscribe,
     () => formatDateTime(iso),
-    () => (iso ? `${formatDateTime(iso, { timeZone: "UTC" })} UTC` : "—"),
+    () => formatDateTime(iso),
   );
 }
 

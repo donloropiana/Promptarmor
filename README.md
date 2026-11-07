@@ -11,7 +11,7 @@ Built for the PromptArmor founding product engineer take-home (Max Bushala, Nove
 Two ways in:
 
 - **Ask Max for a login** to the ClearPath Financial workspace (16 rules, 4 products, sample ads ready to run).
-- **Use your own email.** Sign in with an email link or 6-digit code, or set a password, then **Create a workspace**. New workspaces get the same 16 starter rules and the 4 ClearPath products automatically, and the three sample chips on the empty Ads list. There are no Google or Microsoft sign-in buttons on purpose (see Decisions).
+- **Use your own email.** Sign in with an emailed link (open it on the same device) or set a password, then **Create a workspace**. New workspaces get the same 16 starter rules and the 4 ClearPath products automatically, and the three sample chips on the empty Ads list. There are no Google or Microsoft sign-in buttons on purpose (see Decisions).
 
 `GET /api/health` returns booleans for secrets (which env vars are present, whether the database answers, whether the core tables exist) plus the AI mode and check model in use; never a value.
 
@@ -63,7 +63,7 @@ Inserting a version makes a database trigger queue an `analysis_runs` row. The s
 - **Approve V\<n\>** (A): the exact version is restated with its hash; each open Critical/Major issue needs its own written exception; an attestation box; a rationale if you authored the version. Self-approval with exceptions is blocked when the workspace has more than one member.
 - **Request changes** (R): a note built from the open issues, editable, with **Copy as text**; status becomes Changes requested; the next version arrives as a revision.
 - **What changed** on V2+: inline word diff and Fixed / Still there / New labels.
-- **Reject** lives in the overflow menu. After any decision the next ad opens, with an undo toast.
+- **Reject** lives in the overflow menu. After any decision a toast confirms it and the next ad opens.
 - **Ask about this ad**: the only chat in the product. Reads this version, its issues and the cited rules; plain text; no tools; no history. Requests to act are refused without spending budget.
 
 ### Rules, Products and the audit trail
@@ -85,7 +85,7 @@ Longer version: [docs/security.md](docs/security.md).
 - **Webhooks** from Nango are verified with HMAC-SHA256 over the raw body against a separate signing key, and replayed bodies are ignored (`webhook_receipts`).
 - **Write-once storage.** Version bytes go to a private bucket under a fresh UUID path with `upsert: false`; a unique index stops two versions sharing an object.
 - **HTML creative is sandboxed.** Rendered only in `<iframe sandbox srcdoc>` with a CSP of `default-src 'none'`: no scripts, no network, no forms.
-- **Auth** is Supabase Auth only (email link or code, password with confirmation). Invitations are bound to a verified email and a hashed one-time token.
+- **Auth** is Supabase Auth only (emailed link, or password with email confirmation). Invitations are bound to a verified email and a hashed one-time token.
 
 ## Cost policy
 
