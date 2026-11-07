@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, CheckCheck, ChevronDown, ChevronRight, ExternalLink, Recycle, RotateCcw, SearchX, WandSparkles } from "lucide-react";
+import { BookOpen, CheckCheck, ChevronDown, ChevronRight, ExternalLink, MapPin, Recycle, RotateCcw, SearchX, WandSparkles } from "lucide-react";
 import { cn } from "cn";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
@@ -197,7 +197,15 @@ function IssueCard({
           {isException && <span className="rounded-full border px-1.5 text-[11px] font-medium text-muted-foreground">Accepted as exception</span>}
         </div>
         <div className="min-w-0 max-w-full text-sm font-semibold leading-snug [overflow-wrap:anywhere]">{issueTitle(f)}</div>
-        {f.quote ? (
+        {f.imageAnchor ? (
+          <span data-pinned-note className="inline-flex max-w-full items-start gap-1 text-sm text-foreground [overflow-wrap:anywhere]" dir="auto">
+            <MapPin aria-hidden className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+            <span>
+              <span className="text-muted-foreground">Pinned on the image</span>
+              {f.quote ? <>: {f.quote}</> : null}
+            </span>
+          </span>
+        ) : f.quote ? (
           <q className="block max-w-full border-l-2 border-foreground/30 pl-2 text-sm text-foreground [overflow-wrap:anywhere] [quotes:'“'_'”']" dir="auto">
             {f.quote}
           </q>
@@ -395,11 +403,16 @@ function DismissedCard({ finding: f, readOnly, onSelect, selected }: { finding: 
       <button type="button" onClick={onSelect} className="flex w-full flex-wrap items-center gap-x-2 gap-y-1 text-left focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:outline-none">
         <SeverityWord severity={f.severity} className="text-muted-foreground" />
         <span className="font-medium line-through decoration-muted-foreground/60">{issueTitle(f)}</span>
-        {f.quote && (
+        {f.imageAnchor ? (
+          <span className="inline-flex min-w-0 max-w-full items-center gap-1 truncate text-muted-foreground" dir="auto">
+            <MapPin aria-hidden className="size-3.5 shrink-0" />
+            Pinned on the image{f.quote ? `: ${f.quote}` : ""}
+          </span>
+        ) : f.quote ? (
           <q className="min-w-0 max-w-full truncate text-muted-foreground [quotes:'“'_'”']" dir="auto">
             {f.quote}
           </q>
-        )}
+        ) : null}
       </button>
       <div className="mt-1 break-words text-xs text-muted-foreground">
         {reason ? `${reason} · ` : ""}

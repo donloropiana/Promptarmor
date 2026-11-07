@@ -24,7 +24,7 @@ import { visibleLength } from "@/lib/intake/infer";
 import { requireSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/supabase/types";
-import type { AdFile, Product } from "@/lib/types/ads";
+import { MAX_IMAGE_LABEL_CHARS, type AdFile, type Product } from "@/lib/types/ads";
 
 /**
  * Server Actions for the Ads list and the Ad page.
@@ -303,6 +303,9 @@ export async function dispositionFinding(input: z.input<typeof dispositionSchema
   return { ok: true, data: null };
 }
 
+/** A fraction of the rendered image, 0..1. */
+const fraction = z.number().min(0).max(1);
+
 const addIssueSchema = z.object({
   assetVersionId: uuid,
   quote: z
@@ -317,6 +320,15 @@ const addIssueSchema = z.object({
     .trim()
     .min(10, { error: "Say why this is a problem (at least 10 characters)." })
     .max(1000, { error: "Keep the explanation under 1,000 characters." }),
+  /**
+   * An image note: the spot the reviewer pinned, as fractions of the rendered
+   * image. With a region, `quote` is a short label ("APR in the footer") and
+   * is not looked for in the text.
+   */
+  region: z
+    .object({ x: fraction, y: fraction, w: fraction.optional(), h: fraction.optional() }, { error: "Click a spot on the image first." })
+    .nullable()
+    .optional(),
 });
 
 export type AddIssueInput = z.input<typeof addIssueSchema>;
@@ -327,12 +339,23 @@ export type AddIssueInput = z.input<typeof addIssueSchema>;
  * version's text (the quote must be in the ad), optionally citing the
  * current version of one of the workspace's rules in force. At decision
  * time the database weighs it exactly like an AI finding.
+ *
+ * With `region`, it is an image note instead: a pin the reviewer dropped on
+ * an image ad. The anchor is {type: "image_region", x, y, w?, h?} (fractions
+ * of the rendered image), the quote is the reviewer's label, verified_span
+ * is false and there is no span hash, so recheck never pairs it with words
+ * on a later version: a pin is always "new" to that version.
  */
 export async function addReviewerIssue(input: AddIssueInput): Promise<ActionResult<{ findingId: string }>> {
   const parsed = addIssueSchema.safeParse(input);
   if (!parsed.success) return invalid(parsed.error);
-  const { assetVersionId, quote, severity, ruleId, explanation } = parsed.data;
-  if (visibleLength(quote) === 0) return { ok: false, error: "Select some visible words in the ad first.", code: "invalid_input" };
+  const { assetVersionId, quote, severity, ruleId, explanation, region } = parsed.data;
+  if (visibleLength(quote) === 0) {
+    return { ok: false, error: region ? "Give the note a short label first." : "Select some visible words in the ad first.", code: "invalid_input" };
+  }
+  if (region && quote.length > MAX_IMAGE_LABEL_CHARS) {
+    return { ok: false, error: `Keep the label under ${MAX_IMAGE_LABEL_CHARS} characters; the details go in the explanation.`, code: "invalid_input" };
+  }
 
   const user = await getCurrentUser();
   if (!user) return SIGNED_OUT;
@@ -349,9 +372,23 @@ export async function addReviewerIssue(input: AddIssueInput): Promise<ActionResu
   }
 
   const content = version.content && typeof version.content === "object" && !Array.isArray(version.content) ? (version.content as Record<string, unknown>) : {};
-  const text = version.extracted_text || (typeof content.text === "string" ? content.text : "") || "";
-  const anchor = locateQuote(text, quote);
-  if (!anchor) return { ok: false, error: "Those words are not in this version of the ad.", code: "invalid_input" };
+  let anchor: Json;
+  let spanHashValue: string | null;
+  let verifiedSpan: boolean;
+  if (region) {
+    // A pin only makes sense on a creative the page shows as an image.
+    if (content.format !== "image") return { ok: false, error: "Notes can be pinned on image ads only. Select the words in the text instead.", code: "invalid_input" };
+    anchor = { type: "image_region", x: region.x, y: region.y, ...(region.w !== undefined ? { w: region.w } : {}), ...(region.h !== undefined ? { h: region.h } : {}) };
+    spanHashValue = null;
+    verifiedSpan = false;
+  } else {
+    const text = version.extracted_text || (typeof content.text === "string" ? content.text : "") || "";
+    const located = locateQuote(text, quote);
+    if (!located) return { ok: false, error: "Those words are not in this version of the ad.", code: "invalid_input" };
+    anchor = { type: "text_range", start: located.start, end: located.end };
+    spanHashValue = spanHash(quote);
+    verifiedSpan = true;
+  }
 
   // The rule must be one of this workspace's rules, in force, with a current version.
   let ruleVersionId: string | null = null;
@@ -380,9 +417,9 @@ export async function addReviewerIssue(input: AddIssueInput): Promise<ActionResu
       severity,
       evidence_type: "needs_judgment",
       quote,
-      span_hash: spanHash(quote),
-      verified_span: true,
-      anchor: { type: "text_range", start: anchor.start, end: anchor.end } as Json,
+      span_hash: spanHashValue,
+      verified_span: verifiedSpan,
+      anchor,
       explanation,
     })
     .select("id")
@@ -397,7 +434,14 @@ export async function addReviewerIssue(input: AddIssueInput): Promise<ActionResu
     asset_id: version.asset_id,
     actor_id: user.id,
     kind: "finding.added",
-    data: { finding_id: inserted.id, asset_version_id: version.id, severity, rule_version_id: ruleVersionId, quote: quote.slice(0, 200) } as Json,
+    data: {
+      finding_id: inserted.id,
+      asset_version_id: version.id,
+      severity,
+      rule_version_id: ruleVersionId,
+      quote: quote.slice(0, 200),
+      anchor_type: region ? "image_region" : "text_range",
+    } as Json,
   });
   if (eErr) console.error("[ads] finding.added event failed:", eErr.code, eErr.message);
 

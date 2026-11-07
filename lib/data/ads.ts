@@ -17,7 +17,7 @@ import {
 import { locateQuote } from "@/lib/ai/spans";
 import { createClient } from "@/lib/supabase/server";
 import type { Database, Json } from "@/lib/supabase/types";
-import type { FindingAnchor, Product, Severity, VersionContent } from "@/lib/types/ads";
+import { imageRegionOf, type FindingAnchor, type ImageRegionAnchor, type Product, type Severity, type VersionContent } from "@/lib/types/ads";
 
 /**
  * Reads for the Ads list and the Ad page. Everything goes through the
@@ -740,7 +740,10 @@ export type AdFinding = {
   evidenceType: string;
   quote: string | null;
   verifiedSpan: boolean;
+  /** Where the quoted words sit in the text (null for image notes and unlocated quotes). */
   anchor: FindingAnchor | null;
+  /** A reviewer's pin on the image, when this issue is an image note; `quote` is then its label. */
+  imageAnchor: ImageRegionAnchor | null;
   explanation: string | null;
   suggestedFix: string | null;
   suggestedCopy: string | null;
@@ -1077,6 +1080,7 @@ export async function getAdDetailWith(db: Db, assetId: string, profileId: string
       anchorRaw && typeof anchorRaw.start === "number" && typeof anchorRaw.end === "number" && anchorRaw.end > anchorRaw.start
         ? { start: anchorRaw.start, end: anchorRaw.end, section_id: typeof anchorRaw.section_id === "string" ? anchorRaw.section_id : undefined }
         : null;
+    const imageAnchor = imageRegionOf(f.anchor);
     const disposition =
       d && d.disposition
         ? {
@@ -1099,7 +1103,8 @@ export async function getAdDetailWith(db: Db, assetId: string, profileId: string
       evidenceType: f.evidence_type,
       quote: f.quote,
       verifiedSpan: f.verified_span,
-      anchor,
+      anchor: imageAnchor ? null : anchor,
+      imageAnchor,
       explanation: f.explanation,
       suggestedFix: f.suggested_fix,
       suggestedCopy: f.suggested_copy,
@@ -1129,7 +1134,12 @@ export async function getAdDetailWith(db: Db, assetId: string, profileId: string
   const previousFindings = previous
     ? usableFindings
         .filter((f) => f.asset_version_id === previous.id)
-        .map((f) => ({ ...toFinding(f), wordsStillThere: f.quote ? locateQuote(latest.extractedText, f.quote) !== null : false }))
+        .map((f) => {
+          const prior = toFinding(f);
+          // A pin on the image cannot be confirmed fixed from the text: it stays "Not re-flagged" until a reviewer looks at the new image.
+          const wordsStillThere = prior.imageAnchor ? true : f.quote ? locateQuote(latest.extractedText, f.quote) !== null : false;
+          return { ...prior, wordsStillThere };
+        })
         .sort(sortFindings)
     : [];
 

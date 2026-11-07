@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { AdFinding, AdVersion } from "@/lib/data/ads";
 
-import { AddIssueDialog, readAdSelection, type AdSelection, type RuleOption } from "./add-issue";
+import { AddIssueDialog, readAdSelection, type AdSelection, type PinRegion, type RuleOption } from "./add-issue";
 import { channelLabel } from "./format";
 
 export type Mark = { id: string; start: number; end: number; severity: AdFinding["severity"] };
@@ -19,6 +19,8 @@ export function marksFor(findings: AdFinding[], text: string): Mark[] {
   const lower = text.toLowerCase();
   for (const f of findings) {
     if (!f.open && f.disposition?.disposition !== "accepted_exception") continue;
+    // An image note's "quote" is a label, not words from the ad: it is drawn as a pin, never as a mark.
+    if (f.imageAnchor) continue;
     if (f.anchor && f.anchor.end <= text.length) {
       marks.push({ id: f.id, start: f.anchor.start, end: f.anchor.end, severity: f.severity });
       continue;
@@ -247,6 +249,114 @@ function NoTextNote({ kind, fileRead }: { kind: "PDF" | "image"; fileRead: "tran
   );
 }
 
+// ---- Image notes: numbered pins over an image ad -------------------------
+
+export type Pin = { id: string; n: number; x: number; y: number; severity: AdFinding["severity"]; label: string };
+
+/** Open (or accepted-as-exception) image notes, numbered in panel order. */
+export function pinsFor(findings: AdFinding[]): Pin[] {
+  const pins: Pin[] = [];
+  for (const f of findings) {
+    if (!f.imageAnchor) continue;
+    if (!f.open && f.disposition?.disposition !== "accepted_exception") continue;
+    pins.push({ id: f.id, n: pins.length + 1, x: f.imageAnchor.x, y: f.imageAnchor.y, severity: f.severity, label: f.quote ?? "" });
+  }
+  return pins;
+}
+
+const PIN_COLORS: Record<AdFinding["severity"], string> = {
+  critical: "bg-destructive text-white",
+  major: "bg-foreground text-background",
+  minor: "bg-muted-foreground text-background",
+};
+
+/**
+ * The image with the reviewer's pins over it. The wrapper hugs the image so
+ * percentage offsets land on the same spot at any width. Clicking the image
+ * (when allowed) drops a draft pin and opens the note dialog.
+ */
+function PinnedImage({
+  src,
+  alt,
+  pins,
+  draft,
+  selectedId,
+  onSelect,
+  onPlace,
+}: {
+  src: string;
+  alt: string;
+  pins: Pin[];
+  /** Where a note is being written right now (dialog open). */
+  draft: PinRegion | null;
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+  /** Null when the ad cannot take notes (approved). */
+  onPlace: ((region: PinRegion) => void) | null;
+}) {
+  const place = (e: React.MouseEvent<HTMLImageElement>) => {
+    if (!onPlace) return;
+    const r = e.currentTarget.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) return;
+    const clamp = (v: number) => Math.min(1, Math.max(0, v));
+    onPlace({ x: clamp((e.clientX - r.left) / r.width), y: clamp((e.clientY - r.top) / r.height) });
+  };
+  return (
+    <div className="overflow-hidden rounded-xl border bg-card">
+      <div className="relative mx-auto w-fit max-w-full" data-image-stage>
+        {/* eslint-disable-next-line @next/next/no-img-element -- signed, short-lived URL from private storage */}
+        <img src={src} alt={alt} draggable={false} onClick={place} className={cn("block max-h-[70vh] w-auto max-w-full select-none", onPlace && "cursor-crosshair")} />
+        {pins.map((p) => {
+          const selected = p.id === selectedId;
+          return (
+            <button
+              key={p.id}
+              type="button"
+              data-image-pin
+              data-finding-id={p.id}
+              data-selected={selected || undefined}
+              aria-pressed={selected}
+              aria-label={`Note ${p.n}${p.label ? `: ${p.label}` : ""}, ${p.severity}`}
+              title={p.label || undefined}
+              style={{ left: `${p.x * 100}%`, top: `${p.y * 100}%` }}
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelect(p.id);
+              }}
+              className={cn(
+                "absolute z-10 flex size-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white text-[11px] font-semibold tabular-nums shadow-md transition-[transform,box-shadow] duration-150 motion-reduce:transition-none",
+                "hover:scale-110 focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:outline-none",
+                PIN_COLORS[p.severity],
+                selected && "scale-110 ring-2 ring-foreground ring-offset-2 ring-offset-background",
+              )}
+            >
+              {p.n}
+            </button>
+          );
+        })}
+        {draft && (
+          <span
+            aria-hidden
+            data-image-pin-draft
+            style={{ left: `${draft.x * 100}%`, top: `${draft.y * 100}%` }}
+            className="pointer-events-none absolute z-10 size-6 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-dashed border-foreground bg-background/80 shadow-md"
+          />
+        )}
+      </div>
+      {(onPlace || pins.length > 0) && (
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t px-3 py-1.5 text-xs text-muted-foreground">
+          <span>{onPlace ? "Click a spot on the image to pin a note." : "Pins are the reviewer's notes on the image."}</span>
+          {pins.length > 0 && (
+            <span className="tabular-nums">
+              {pins.length} note{pins.length === 1 ? "" : "s"}
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /**
  * The creative on the left of the ad page. Text ads render as a card with
  * sections; HTML in a sandboxed iframe; PDF as "Open PDF" + extracted text with
@@ -292,22 +402,23 @@ export function CreativeView({
   rulesInForce?: RuleOption[];
   /** "+ Add issue" is offered only while the ad can still take decisions (not approved). */
   canAddIssue?: boolean;
-  /** Called with the new issue's id so the page can select it. */
-  onIssueAdded?: (findingId: string) => void;
+  /** Called with the new issue's id so the page can select it; `where` says which view shows it. */
+  onIssueAdded?: (findingId: string, where: "text" | "image") => void;
 }) {
   const format = version.content.format;
   const text = version.extractedText || version.content.text || "";
   const marks = useMemo(() => marksFor(findings, text), [findings, text]);
+  const pins = useMemo(() => pinsFor(findings), [findings]);
   const containerRef = useRef<HTMLDivElement>(null);
   const textWrapRef = useRef<HTMLDivElement>(null);
   const reduceMotion = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-  // Selecting an issue: scroll its words into view (DOM only). Re-runs when
+  // Selecting an issue: scroll its words (or its pin) into view (DOM only). Re-runs when
   // the findings change so a just-added issue is found once the page refreshes.
   useEffect(() => {
     if (!selectedId) return;
     const t = setTimeout(() => {
-      const el = containerRef.current?.querySelector<HTMLElement>(`mark[data-finding-id="${selectedId}"]`);
+      const el = containerRef.current?.querySelector<HTMLElement>(`mark[data-finding-id="${selectedId}"], [data-image-pin][data-finding-id="${selectedId}"]`);
       el?.scrollIntoView({ block: "center", behavior: reduceMotion ? "auto" : "smooth" });
     }, 30);
     return () => clearTimeout(t);
@@ -317,7 +428,14 @@ export function CreativeView({
   const showingText = (view === "text" || format === "text") && text.trim().length > 0;
   const addIssueAvailable = canAddIssue && showingText;
   const [floating, setFloating] = useState<{ quote: string; left: number; top: number } | null>(null);
-  const [dialog, setDialog] = useState<{ quote: string; editable: boolean } | null>(null);
+  const [dialog, setDialog] = useState<{ quote: string; editable: boolean; region: PinRegion | null } | null>(null);
+
+  // ---- Image notes: a click on the image pins a note ----------------------
+  const pinningAvailable = canAddIssue && format === "image" && view === "preview" && Boolean(fileUrl);
+  const openPinDialog = useCallback((region: PinRegion) => {
+    setFloating(null);
+    setDialog({ quote: "", editable: true, region });
+  }, []);
 
   /** Reads the selection; shows the floating button by its last line when it is ad text. */
   const captureSelection = useCallback(() => {
@@ -378,7 +496,7 @@ export function CreativeView({
     (quote: string | null) => {
       const q = (quote ?? readAdSelection(textWrapRef.current)?.quote ?? "").trim();
       setFloating(null);
-      setDialog({ quote: q, editable: q.length === 0 });
+      setDialog({ quote: q, editable: q.length === 0, region: null });
     },
     [],
   );
@@ -461,10 +579,15 @@ export function CreativeView({
     body = version.content.html ? <HtmlPreview html={version.content.html} /> : <p className="text-sm text-muted-foreground">The HTML for this version is not available.</p>;
   } else if (format === "image") {
     body = fileUrl ? (
-      <div className="overflow-hidden rounded-xl border bg-card">
-        {/* eslint-disable-next-line @next/next/no-img-element -- signed, short-lived URL from private storage */}
-        <img src={fileUrl} alt={version.content.filename ? `Ad image: ${version.content.filename}` : "Ad image"} className="mx-auto max-h-[70vh] w-auto max-w-full" />
-      </div>
+      <PinnedImage
+        src={fileUrl}
+        alt={version.content.filename ? `Ad image: ${version.content.filename}` : "Ad image"}
+        pins={pins}
+        draft={dialog?.region ?? null}
+        selectedId={selectedId}
+        onSelect={onSelect}
+        onPlace={pinningAvailable ? openPinDialog : null}
+      />
     ) : (
       <div className="flex items-center gap-2 rounded-xl border bg-card p-6 text-sm text-muted-foreground">
         <ImageIcon aria-hidden className="size-4" /> The image could not be loaded. Reload the page to get a fresh link.
@@ -508,7 +631,7 @@ export function CreativeView({
       ) : (
         body
       )}
-      {addIssueAvailable && (
+      {(addIssueAvailable || pinningAvailable) && (
         <AddIssueDialog
           open={dialog !== null}
           onOpenChange={(o) => {
@@ -518,8 +641,9 @@ export function CreativeView({
           versionNo={version.versionNo}
           quote={dialog?.quote ?? ""}
           quoteEditable={dialog?.editable ?? false}
+          region={dialog?.region ?? null}
           rules={rulesInForce}
-          onAdded={(id) => onIssueAdded?.(id)}
+          onAdded={(id) => onIssueAdded?.(id, dialog?.region ? "image" : "text")}
         />
       )}
     </div>

@@ -7,7 +7,7 @@ import { normalizedTextHash, sha256Hex } from "@/lib/intake/hash";
 import { requireSupabaseAdminClient } from "@/lib/supabase/admin";
 import { downloadObject } from "@/lib/supabase/storage";
 import type { Database, Json, TablesInsert } from "@/lib/supabase/types";
-import type { Product, Severity, VersionContent } from "@/lib/types/ads";
+import { imageRegionOf, type Product, type Severity, type VersionContent } from "@/lib/types/ads";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { analyzeContent, hiddenTextRuleCode, LLM_TIMEOUT_MS, mergeFindings } from "./analyze";
@@ -775,9 +775,12 @@ async function loadPriorFindings(admin: Admin, version: VersionRow): Promise<Pri
   const latestComplete = (runs ?? []).find((r) => r.status === "complete");
   const latestAny = (runs ?? [])[0];
   const runIds = latestComplete ? [latestComplete.id] : latestAny ? [latestAny.id] : [];
-  const query = admin.from("findings").select("id, rule_version_id, span_hash, quote, origin, analysis_run_id").eq("asset_version_id", prev.id);
-  const { data: findings } = runIds.length > 0 ? await query.or(`origin.eq.reviewer,analysis_run_id.in.(${runIds.join(",")})`) : await query.eq("origin", "reviewer");
-  if (!findings || findings.length === 0) return [];
+  const query = admin.from("findings").select("id, rule_version_id, span_hash, quote, origin, analysis_run_id, anchor").eq("asset_version_id", prev.id);
+  const { data: rows } = runIds.length > 0 ? await query.or(`origin.eq.reviewer,analysis_run_id.in.(${runIds.join(",")})`) : await query.eq("origin", "reviewer");
+  // A reviewer's pin on the image has a label, not quoted words: it is never
+  // paired with a finding on the new version (the new image needs a new look).
+  const findings = (rows ?? []).filter((f) => !imageRegionOf(f.anchor));
+  if (findings.length === 0) return [];
 
   const ruleVersionIds = Array.from(new Set(findings.map((f) => f.rule_version_id).filter((id): id is string => Boolean(id))));
   const codeByVersion = new Map<string, string>();
