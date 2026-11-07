@@ -23,16 +23,26 @@ import { editOffer, previewOfferChange, type OfferChangePreview } from "@/lib/ac
 import type { WorkspaceOffer } from "@/lib/data/rules";
 
 import { ProductTermFields, type TermFormValues } from "./product-term-fields";
-import { fieldsForEdit, termInputValue } from "./term-fields";
+import { fieldsForEdit, TERM_FIELDS, termInputValue } from "./term-fields";
+
+const TERM_KIND = new Map(TERM_FIELDS.map((f) => [f.key, f.kind]));
 
 function isScalar(v: unknown): boolean {
   return v === null || v === undefined || typeof v !== "object";
 }
 
 /** Scalar terms become form strings; nested objects/arrays are kept aside and carried over on save. */
+/** Stored numbers come into the editor with their unit ("2" -> "2%", "95" -> "$95") so the value says what it is; saving reads the number back out. */
 function toFormValues(terms: Record<string, unknown>): TermFormValues {
   const out: TermFormValues = {};
-  for (const [k, v] of Object.entries(terms)) if (isScalar(v)) out[k] = termInputValue(v);
+  for (const [k, v] of Object.entries(terms)) {
+    if (!isScalar(v)) continue;
+    const kind = TERM_KIND.get(k);
+    if (typeof v === "number" && kind === "percent") out[k] = `${termInputValue(v)}%`;
+    else if (typeof v === "number" && kind === "money") out[k] = `$${termInputValue(v)}`;
+    else if (typeof v === "number" && kind === "months") out[k] = `${termInputValue(v)} months`;
+    else out[k] = termInputValue(v);
+  }
   return out;
 }
 

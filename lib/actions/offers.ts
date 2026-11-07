@@ -135,7 +135,9 @@ function cleanTerms(raw: Record<string, unknown>): Record<string, unknown> {
     if (typeof v === "string") {
       const s = v.trim();
       if (!s) continue;
-      if (NUMERIC_KEYS.has(key) && /^-?\d+(\.\d+)?$/.test(s)) out[key] = Number(s);
+      // A built-in numeric fact may be typed with its unit ("8.99%", "$95", "12 months"): keep the number.
+      const n = NUMERIC_KEYS.has(key) ? s.replace(/,/g, "").match(/^\s*[$]?\s*(-?\d+(?:\.\d+)?)\s*(%|\$|months?|mo\.?|yrs?|years?)?\s*$/i) : null;
+      if (n) out[key] = Number(n[1]);
       else if (BOOLEAN_KEYS.has(key) && (s === "true" || s === "false")) out[key] = s === "true";
       else out[key] = s.slice(0, 2000);
       continue;

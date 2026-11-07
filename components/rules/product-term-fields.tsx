@@ -20,7 +20,8 @@ import { factKey, factLabel, TERM_FIELDS, TEXT_TERM_KEYS, TEXT_TERM_LABELS, type
  */
 export type TermFormValues = Record<string, string>;
 
-const UNIT: Partial<Record<TermField["kind"], string>> = { percent: "%", money: "$", months: "months", date: "YYYY-MM-DD" };
+/** Example values for built-in facts; the unit travels with the value, so nothing is shown that cannot be set. */
+const EXAMPLE: Partial<Record<TermField["kind"], string>> = { percent: "e.g. 8.99%", money: "e.g. $95", months: "e.g. 12 months", number: "e.g. 36", date: "e.g. 2026-11-01" };
 const PROSE = new Set<string>(TEXT_TERM_KEYS);
 const BY_KEY = new Map(TERM_FIELDS.map((f) => [f.key, f]));
 
@@ -91,7 +92,6 @@ export function ProductTermFields({
             {rows.map((k) => {
               const known = BY_KEY.get(k);
               const label = known?.label ?? factLabel(k);
-              const unit = known ? UNIT[known.kind] : undefined;
               if (known?.kind === "boolean") {
                 return (
                   <li key={k} className="grid grid-cols-[1fr_1fr_auto] items-center gap-2">
@@ -112,7 +112,6 @@ export function ProductTermFields({
                 <li key={k} className="grid grid-cols-[1fr_1fr_auto] items-center gap-2">
                   <label htmlFor={`${idPrefix}-${k}`} className="truncate text-sm" title={known?.hint ?? k}>
                     {label}
-                    {unit ? <span className="ml-1 text-xs text-muted-foreground">{unit}</span> : null}
                   </label>
                   <Input
                     id={`${idPrefix}-${k}`}
@@ -120,7 +119,7 @@ export function ProductTermFields({
                     value={values[k] ?? ""}
                     onChange={(e) => onChange(k, e.target.value)}
                     inputMode={!known || known.kind === "text" || known.kind === "date" ? "text" : "decimal"}
-                    placeholder={known?.hint ?? ""}
+                    placeholder={(known && EXAMPLE[known.kind]) ?? known?.hint ?? ""}
                     className={known && known.kind !== "text" ? "tabular-nums" : undefined}
                     maxLength={300}
                   />
