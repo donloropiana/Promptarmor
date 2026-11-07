@@ -20,7 +20,7 @@ export function StatusWord({ status, checking, className }: { status: string; ch
   if (checking) {
     return (
       <span className={cn("inline-flex items-center gap-1.5 text-xs text-muted-foreground", className)}>
-        <Spinner className="size-3" />
+        <Spinner className="size-3 motion-reduce:animate-none" />
         Checking…
       </span>
     );

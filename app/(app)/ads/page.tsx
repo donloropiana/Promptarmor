@@ -68,7 +68,7 @@ async function AdsContent({ searchParams }: { searchParams: SearchParams }) {
         <SummaryLine summary={summary} />
         <MetricsStrip metrics={metrics} />
       </div>
-      <AdsList rows={list.rows} counts={list.counts} tab={tab} anyChecking={list.anyChecking} triage={list.triage} skipped={list.skipped} now={list.now} />
+      <AdsList rows={list.rows} counts={list.counts} tab={tab} anyChecking={list.anyChecking} triage={list.triage} skipped={list.skipped} now={list.now} truncated={list.truncated} />
     </div>
   );
 }

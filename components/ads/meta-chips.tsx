@@ -71,7 +71,7 @@ export function MetaChips({ assetId, product, channel, inferred, disabled }: { a
           ))}
         </SelectContent>
       </Select>
-      {pending && <Spinner className="size-3" />}
+      {pending && <Spinner className="size-3 motion-reduce:animate-none" />}
       {inferred && !pending && <span className="text-[11px] text-muted-foreground">inferred</span>}
     </div>
   );

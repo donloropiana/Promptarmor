@@ -59,19 +59,52 @@ export function inferChannel(input: {
   return "display";
 }
 
-/** Explicit title, else the first line (<= 80 chars), else the filename, else a generic title. */
+/**
+ * Longest title intake keeps. Matches the New ad form (maxLength 200) and
+ * updateAdMeta; the column allows 500 so older rows may be longer.
+ */
+export const MAX_TITLE_CHARS = 200;
+
+/**
+ * Cuts a line to `max` characters at a word boundary with an ellipsis. A line
+ * with no spaces (a URL, a hashtag wall) is cut hard; the ellipsis still says
+ * it was.
+ */
+export function shortenTitle(line: string, max: number): string {
+  const trimmed = line.replace(/\s+/g, " ").trim();
+  if ([...trimmed].length <= max) return trimmed;
+  // Code points, not UTF-16 units, so an emoji or CJK title is never split mid-character.
+  const head = [...trimmed].slice(0, max - 1).join("");
+  const atWord = head.replace(/\s+\S*$/, "");
+  return `${atWord.length >= max * 0.6 ? atWord : head}…`;
+}
+
+/** Explicit title (<= 200 chars), else the first line (<= 80 chars), else the filename, else a generic title. */
 export function inferTitle(input: { title?: string | null; text?: string | null; filename?: string | null }): string {
   const explicit = input.title?.trim();
-  if (explicit) return explicit.slice(0, 120);
+  if (explicit) return shortenTitle(explicit, MAX_TITLE_CHARS);
   const text = (input.text ?? "").replace(/\r/g, "");
   for (const rawLine of text.split("\n")) {
     const line = rawLine.replace(/^(subject|preheader)\s*:\s*/i, "").trim();
     if (!line) continue;
-    if (line.length <= 80) return line;
-    const cut = line.slice(0, 77).replace(/\s+\S*$/, "");
-    return `${cut}…`;
+    return shortenTitle(line, 80);
   }
   const name = input.filename?.trim();
-  if (name) return name.replace(/\.[a-z0-9]{2,5}$/i, "").slice(0, 120) || name.slice(0, 120);
+  if (name) return shortenTitle(name.replace(/\.[a-z0-9]{2,5}$/i, "") || name, MAX_TITLE_CHARS);
   return "Untitled ad";
+}
+
+/**
+ * True when text has something a person could read: letters, digits,
+ * symbols (emoji included) or punctuation. Whitespace, zero-width and other
+ * format characters alone do not count.
+ */
+export function hasVisibleText(text: string | null | undefined): boolean {
+  return Boolean(text && /[\p{L}\p{N}\p{S}\p{P}]/u.test(text));
+}
+
+/** Number of visible characters (code points that are not whitespace or format characters). */
+export function visibleLength(text: string | null | undefined): number {
+  if (!text) return 0;
+  return [...text.replace(/[\s\p{Cf}\p{Z}]/gu, "")].length;
 }

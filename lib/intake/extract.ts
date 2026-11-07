@@ -117,12 +117,19 @@ export function sectionsFromHtml(html: string): Section[] {
   return paragraphs.map((p, i) => ({ id: `p${i + 1}`, label: labelFor(i, p, paragraphs.length), text: p }));
 }
 
+/** An ad is a handful of pages; a 2,000-page PDF is a mistake or a stall attempt, not an ad. */
+export const MAX_PDF_PAGES = 60;
+
 /** PDF -> one section per page, using unpdf (serverless PDF.js build). */
 export async function extractPdf(bytes: Uint8Array): Promise<ExtractedDocument> {
-  const { extractText } = await import("unpdf");
+  const { extractText, getDocumentProxy } = await import("unpdf");
   const copy = new Uint8Array(bytes.byteLength);
   copy.set(bytes);
-  const result = await extractText(copy, { mergePages: false });
+  const doc = await getDocumentProxy(copy);
+  if (doc.numPages > MAX_PDF_PAGES) {
+    throw new Error(`it has ${doc.numPages} pages and ads are at most ${MAX_PDF_PAGES} pages. Export just the ad and try again`);
+  }
+  const result = await extractText(doc, { mergePages: false });
   const pages = result.totalPages;
   const sections: Section[] = [];
   result.text.forEach((pageText, i) => {

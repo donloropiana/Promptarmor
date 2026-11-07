@@ -53,7 +53,7 @@ export function EmptyWorkspace({ samples, workspaceName }: { samples: SampleChip
         {!paste ? (
           <div className="flex flex-col items-center gap-4 text-center">
             <div className="flex size-12 items-center justify-center rounded-full bg-muted">
-              {pending ? <Spinner className="size-5" /> : <UploadCloud aria-hidden className="size-5 text-muted-foreground" />}
+              {pending ? <Spinner className="size-5 motion-reduce:animate-none" /> : <UploadCloud aria-hidden className="size-5 text-muted-foreground" />}
             </div>
             <div>
               <div className="text-lg font-medium">Drop an ad to check it</div>
@@ -84,7 +84,7 @@ export function EmptyWorkspace({ samples, workspaceName }: { samples: SampleChip
                 Drop a file instead
               </Button>
               <Button type="button" onClick={() => submitText(text.trim())} disabled={pending || tooShort}>
-                {pending ? <Spinner /> : null}
+                {pending ? <Spinner className="motion-reduce:animate-none" /> : null}
                 Check this ad
               </Button>
             </div>
@@ -135,7 +135,7 @@ export function SampleChips({ samples }: { samples: SampleChip[] }) {
           >
             <span className="flex w-full items-center gap-2 text-sm font-medium">
               <span className="min-w-0 flex-1 truncate">{s.title}</span>
-              {pending && active === s.key ? <Spinner className="size-3.5" /> : null}
+              {pending && active === s.key ? <Spinner className="size-3.5 motion-reduce:animate-none" /> : null}
             </span>
             <span className="text-xs text-muted-foreground">{s.description}</span>
             <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">

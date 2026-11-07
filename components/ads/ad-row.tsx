@@ -84,7 +84,9 @@ export function AdRow({ row, now }: { row: AdListRow; now: number }) {
         <Thumb thumbnail={row.thumbnail} title={row.title} />
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0 truncate text-sm font-medium text-foreground">{row.title}</div>
+            <div data-ad-title className="min-w-0 truncate text-sm font-medium text-foreground" dir="auto" title={row.title}>
+              {row.title}
+            </div>
             <div className="flex shrink-0 items-center gap-2">
               <StatusWord status={row.status} checking={row.checking} className="hidden sm:inline-flex" />
               <span className="text-xs tabular-nums text-muted-foreground" title={submittedAbsolute}>
@@ -93,7 +95,7 @@ export function AdRow({ row, now }: { row: AdListRow; now: number }) {
             </div>
           </div>
 
-          <div className="mt-0.5 truncate text-sm text-muted-foreground">
+          <div className="mt-0.5 truncate text-sm text-muted-foreground" dir="auto">
             {row.checking ? (
               <span>Checking against the rules and product terms…</span>
             ) : row.hiddenText ? (
@@ -107,8 +109,14 @@ export function AdRow({ row, now }: { row: AdListRow; now: number }) {
                 {row.topIssue.quote && row.topIssue.explanation && <span> — </span>}
                 {row.topIssue.explanation && <span>{row.topIssue.explanation}</span>}
               </>
+            ) : row.tab === "approved" ? (
+              // The approval is the news on this tab, not the absence of open issues.
+              <span>{row.withExceptions ? `Approved with ${row.exceptionCount || "recorded"} exception${row.exceptionCount === 1 ? "" : "s"}` : "Approved as written"}</span>
             ) : row.notScreened ? (
               <span>Not checked by AI. Review it by hand.</span>
+            ) : row.noText ? (
+              // A file nothing could read: "No open issues" would be a false all-clear.
+              <span>No text could be read from this {row.thumbnail.kind === "icon" && row.thumbnail.icon === "pdf" ? "PDF" : "image"}. Open it and review by hand.</span>
             ) : (
               <span>No open issues</span>
             )}

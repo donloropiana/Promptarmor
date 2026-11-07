@@ -177,7 +177,24 @@ async function main() {
       await page.getByRole("button", { name: "Check this ad" }).click();
       console.log("      pasted an ad through New ad");
     }
-    await page.waitForURL(/\/ads\/[0-9a-f-]{36}/, { timeout: 90_000 });
+    // The product refuses some submissions in the dialog (hourly ad limit,
+    // unreadable text); say which rather than timing out in silence.
+    const refusal = page
+      .getByRole("dialog")
+      .locator("[role=alert]")
+      .first()
+      .waitFor({ state: "visible", timeout: 90_000 })
+      .then(async () => (await page.getByRole("dialog").locator("[role=alert]").first().innerText()).trim())
+      .catch(() => null);
+    const navigated = page
+      .waitForURL(/\/ads\/[0-9a-f-]{36}/, { timeout: 90_000 })
+      .then(() => "navigated" as const)
+      .catch(() => null);
+    const first = await Promise.race([refusal, navigated]);
+    if (first !== "navigated") {
+      const message = typeof first === "string" ? first : (await refusal) ?? "no ad page and no message within 90 s";
+      throw new Error(`New ad did not open an ad page: ${message}`);
+    }
     const adUrl = page.url();
     record("new ad -> ad page", /\/ads\/[0-9a-f-]{36}/.test(adUrl), adUrl);
 

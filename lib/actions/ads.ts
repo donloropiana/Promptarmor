@@ -10,6 +10,7 @@ import { startAnalysisForVersion, askAboutAd as askAboutAdEngine } from "@/lib/a
 import { getActiveProfileId, getCurrentUser, getMembershipRole } from "@/lib/auth/dal";
 import { getNextNeedsReviewId } from "@/lib/data/ads";
 import {
+  IntakeError,
   acceptSourceItem,
   addVersion,
   createAd,
@@ -17,6 +18,7 @@ import {
   declineSourceItem,
   simulateRevision as simulateRevisionIntake,
 } from "@/lib/intake/ads";
+import { visibleLength } from "@/lib/intake/infer";
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/supabase/types";
 import type { AdFile, Product } from "@/lib/types/ads";
@@ -37,6 +39,11 @@ const NO_WORKSPACE: ActionResult<never> = { ok: false, error: "Pick a workspace 
 const NOT_FOUND: ActionResult<never> = { ok: false, error: "That ad is not in this workspace.", code: "PT404" };
 
 const MAX_UPLOAD_BYTES = 4 * 1024 * 1024; // Vercel caps request bodies at 4.5 MB.
+/** Pasted text: at least a sentence, at most 200,000 characters (intake keeps 60,000 for the check). */
+const MIN_TEXT_CHARS = 10;
+const MAX_TEXT_CHARS = 200_000;
+/** Intake errors whose message is already written for the person who pasted or dropped the ad. */
+const PLAIN_INTAKE_CODES = new Set(["empty", "empty_file", "too_large", "unsupported_type", "not_member", "rate_limited", "no_content"]);
 const ACCEPTED_MIME = new Set(["application/pdf", "image/png", "image/jpeg", "image/webp", "text/html", "text/plain"]);
 const ACCEPTED_EXT = /\.(pdf|png|jpe?g|webp|html?|txt)$/i;
 
@@ -179,8 +186,10 @@ export async function uploadAd(formData: FormData): Promise<ActionResult<never>>
 
   const file = await fileFromForm(formData);
   if (file && "ok" in file) return file;
-  if (!file && text.length < 10) return { ok: false, error: "Paste the ad text (at least a sentence) or choose a file.", code: "invalid_input" };
-  if (text.length > 200_000) return { ok: false, error: "That text is too long. Paste up to 200,000 characters.", code: "invalid_input" };
+  // Visible characters only: whitespace, zero-width and other invisible
+  // characters never count as ad text.
+  if (!file && visibleLength(text) < MIN_TEXT_CHARS) return { ok: false, error: "Paste the ad text (at least a sentence) or choose a file.", code: "invalid_input" };
+  if (text.length > MAX_TEXT_CHARS) return { ok: false, error: `That text is too long. Paste up to ${MAX_TEXT_CHARS.toLocaleString("en-US")} characters.`, code: "invalid_input" };
 
   let created: { assetId: string; versionId: string };
   try {
@@ -213,6 +222,12 @@ export async function uploadAd(formData: FormData): Promise<ActionResult<never>>
   } catch (err) {
     const message = err instanceof Error ? err.message : "";
     if (/unchanged|identical|PT409/i.test(message)) return { ok: false, error: "This exact ad is already in the workspace.", code: "PT409" };
+    // Intake already says in plain English what was wrong with the input.
+    if (err instanceof IntakeError && PLAIN_INTAKE_CODES.has(err.code)) return { ok: false, error: err.message, code: err.code };
+    if (err instanceof IntakeError && err.code === "pdf_unreadable") {
+      console.error("[ads] pdf unreadable:", message);
+      return { ok: false, error: "That PDF could not be read. Export it again from the original file, or paste the text.", code: err.code };
+    }
     return fail(err, "We could not read that ad. Try a different file or paste the text.");
   }
   kickAnalysis(created.versionId);

@@ -34,6 +34,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarRail,
   useSidebar,
 } from "@/components/ui/sidebar";
 import { setActiveProfile } from "@/lib/actions/profiles";
@@ -113,6 +114,7 @@ export function AppSidebar({
       <SidebarFooter className="p-2">
         <WorkspaceMenu user={user} workspaceName={active?.name ?? "Workspace"} pathname={pathname} />
       </SidebarFooter>
+      <SidebarRail />
     </Sidebar>
   );
 }

@@ -13,7 +13,7 @@ Two ways in:
 - **Ask Max for a login** to the ClearPath Financial workspace (16 rules, 4 products, sample ads ready to run).
 - **Use your own email.** Sign in with an emailed link (open it on the same device) or set a password, then **Create a workspace**. New workspaces get the same 16 starter rules and the 4 ClearPath products automatically, and the three sample chips on the empty Ads list. There are no Google or Microsoft sign-in buttons on purpose (see Decisions).
 
-`GET /api/health` returns booleans for secrets (which env vars are present, whether the database answers, whether the core tables exist) plus the AI mode and check model in use; never a value.
+`GET /api/health` answers `{ ok, time }` to anyone. Sign in first (or send the cron bearer) and it adds booleans for secrets (which env vars are present, whether the database answers, whether the core tables exist) plus the AI mode and check model in use; never a value.
 
 ## Six-minute demo
 
@@ -96,7 +96,7 @@ Longer version, with the per-mode table and prices: [docs/ai-policy.md](docs/ai-
 - **Identical content is never re-checked.** Each run computes `reuse_key` = sha256(normalized text, rule version ids, product version ids, prompt hash); a previous complete run with the same key in the workspace has its findings copied at $0, in every mode ("Reused an earlier identical check" in the history). Byte-identical re-submissions of the same ad are refused outright (`PT409`).
 - **Prompt caching.** The constant part of the check prompt (template, rules, product terms) sits before an Anthropic cache breakpoint; cache read and write tokens are priced separately and recorded per run.
 - **Hard caps in the database:** $10 per UTC day across all workspaces, $3 per workspace by default (ClearPath: $5, trusted), a $5 shared pool for untrusted workspaces and $3 per creator. Reservations are estimated from characters, settled with real tokens, and released on failure. The Ads list shows "AI spend today vs cap" and a banner at 80%. A spend limit on the AI Gateway key in the Vercel dashboard is the intended second fence; nothing in the repo depends on it.
-- **Cents per check**, shown per run on the ad page (model, tokens, cost) and on the Approved record. `/api/health` reports the mode and check model in use.
+- **Cents per check**, shown per run on the ad page (model, tokens, cost) and on the Approved record. `/api/health` reports the mode and check model in use to a signed-in user.
 
 ## Architecture
 

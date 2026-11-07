@@ -24,7 +24,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { leaveProfile, removeMember, setMemberRole } from "@/lib/actions/profiles";
 import type { MemberRow } from "@/lib/data/workspace";
 
-type Confirm = { kind: "remove"; member: MemberRow } | { kind: "leave" } | null;
+type Confirm = { kind: "remove"; member: MemberRow } | { kind: "leave" } | { kind: "demote_self"; member: MemberRow } | null;
 
 /**
  * Members with their role. Owners can change roles and remove members; the
@@ -43,6 +43,7 @@ export function MembersList({ profileId, members, me, myRole }: { profileId: str
     startTransition(async () => {
       const res = await setMemberRole({ profileId, userId: m.userId, role });
       setBusy(null);
+      setConfirm(null);
       if (!res.ok) {
         toast.error("Couldn't change the role", { description: res.error });
         return;
@@ -116,7 +117,10 @@ export function MembersList({ profileId, members, me, myRole }: { profileId: str
                         {m.role === "member" ? (
                           <DropdownMenuItem onSelect={() => changeRole(m, "owner")}>Make owner</DropdownMenuItem>
                         ) : (
-                          <DropdownMenuItem onSelect={() => changeRole(m, "member")} disabled={lastOwner}>
+                          <DropdownMenuItem
+                            onSelect={() => (isMe ? setConfirm({ kind: "demote_self", member: m }) : changeRole(m, "member"))}
+                            disabled={lastOwner}
+                          >
                             Make member
                           </DropdownMenuItem>
                         )}
@@ -155,27 +159,34 @@ export function MembersList({ profileId, members, me, myRole }: { profileId: str
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {confirm?.kind === "remove" ? `Remove ${confirm.member.fullName ?? confirm.member.email}?` : "Leave this workspace?"}
+              {confirm?.kind === "remove"
+                ? `Remove ${confirm.member.fullName ?? confirm.member.email}?`
+                : confirm?.kind === "demote_self"
+                  ? "Make yourself a member?"
+                  : "Leave this workspace?"}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {confirm?.kind === "remove"
                 ? "They lose access right away. Accounts they connected stop feeding this workspace, and their decisions stay in the record."
-                : "You lose access right away. Accounts you connected stop feeding this workspace. An owner can invite you back."}
+                : confirm?.kind === "demote_self"
+                  ? "You keep reviewing and approving ads, but you can no longer invite people, change roles or rename the workspace. Only another owner can make you an owner again."
+                  : "You lose access right away. Accounts you connected stop feeding this workspace. An owner can invite you back."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={busy !== null}>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              variant="destructive"
+              variant={confirm?.kind === "demote_self" ? "default" : "destructive"}
               disabled={busy !== null}
               onClick={(e) => {
                 e.preventDefault();
                 if (confirm?.kind === "remove") remove(confirm.member);
+                else if (confirm?.kind === "demote_self") changeRole(confirm.member, "member");
                 else if (confirm?.kind === "leave") leave();
               }}
             >
               {busy ? <Spinner /> : null}
-              {confirm?.kind === "remove" ? "Remove" : "Leave"}
+              {confirm?.kind === "remove" ? "Remove" : confirm?.kind === "demote_self" ? "Make me a member" : "Leave"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

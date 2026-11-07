@@ -44,7 +44,7 @@ async function RulesContent({ searchParams }: { searchParams: SearchParams }) {
 
   return (
     <div className="flex flex-col gap-5">
-      <PageHeader title="Rules" description="What every ad is checked against: the law, your policies and your real product terms." />
+      <PageHeader title="Rules" description="What every ad is checked against: the law, your own rules and your real product terms." />
       <RulesTabs
         initialTab={initialTab}
         rulesCount={rules.length}

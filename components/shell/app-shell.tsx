@@ -5,6 +5,7 @@ import type { ProfileSummary } from "@/lib/auth/dal";
 
 import { AppSidebar, type ShellUser } from "./app-sidebar";
 import { NotificationsBell } from "./notifications-bell";
+import { SidebarReopen } from "./sidebar-reopen";
 import { Wordmark } from "./wordmark";
 
 /**
@@ -34,6 +35,7 @@ export function AppShell({
           <span className="min-w-0 flex-1 truncate text-sm font-medium">{active?.name ?? <Wordmark />}</span>
           <NotificationsBell />
         </header>
+        <SidebarReopen />
         <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col px-4 py-4 md:px-6 md:py-6">{children}</div>
       </SidebarInset>
     </SidebarProvider>

@@ -103,7 +103,10 @@ export async function clearSamples(input: FormData | Record<string, unknown>): P
     cleared += 1;
   }
   refresh();
-  if (firstError && cleared === 0) return { ok: false, error: `Couldn't clear the samples: ${firstError}` };
+  if (firstError && cleared === 0) {
+    // The database says "profile"; people see "workspace".
+    return { ok: false, error: `Couldn't clear the samples: ${firstError.replace(/\bprofile\b/gi, "workspace")}` };
+  }
   return { ok: true, data: { cleared } };
 }
 

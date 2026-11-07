@@ -15,6 +15,7 @@ import type { AdFinding } from "@/lib/data/ads";
 import type { Severity } from "@/lib/types/ads";
 
 import { severityLabel } from "./format";
+import { LongText } from "./long-text";
 import { SeverityWord } from "./severity";
 import { recheckLabel } from "./what-changed";
 
@@ -187,9 +188,11 @@ function IssueCard({
           {f.severity !== f.originalSeverity && <span className="text-[11px] text-muted-foreground">was {severityLabel(f.originalSeverity)}</span>}
           {isException && <span className="rounded-full border px-1.5 text-[11px] font-medium text-muted-foreground">Accepted as exception</span>}
         </div>
-        <div className="text-sm font-semibold leading-snug">{issueTitle(f)}</div>
+        <div className="min-w-0 max-w-full text-sm font-semibold leading-snug [overflow-wrap:anywhere]">{issueTitle(f)}</div>
         {f.quote ? (
-          <q className="block border-l-2 border-foreground/30 pl-2 text-sm text-foreground [quotes:'“'_'”']">{f.quote}</q>
+          <q className="block max-w-full border-l-2 border-foreground/30 pl-2 text-sm text-foreground [overflow-wrap:anywhere] [quotes:'“'_'”']" dir="auto">
+            {f.quote}
+          </q>
         ) : null}
       </button>
       <div className="space-y-2.5 px-3.5 pb-3 pt-1.5">
@@ -198,7 +201,7 @@ function IssueCard({
             <SearchX aria-hidden className="size-3.5" /> Evidence not found in the text. Check the creative by hand.
           </p>
         )}
-        {f.explanation && <p className="text-sm text-muted-foreground">{f.explanation}</p>}
+        {f.explanation && <p className="text-sm text-muted-foreground [overflow-wrap:anywhere]">{f.explanation}</p>}
         {f.rule && (
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
             <span className="inline-flex items-center gap-1">
@@ -222,7 +225,9 @@ function IssueCard({
           <div className="rounded-lg bg-muted/50 p-2.5">
             {f.suggestedFix && <p className="text-sm">{f.suggestedFix}</p>}
             {f.suggestedCopy && (
-              <q className="mt-1 block whitespace-pre-wrap text-sm text-foreground [quotes:'“'_'”']">{f.suggestedCopy}</q>
+              <q className="mt-1 block whitespace-pre-wrap text-sm text-foreground [overflow-wrap:anywhere] [quotes:'“'_'”']" dir="auto">
+                {f.suggestedCopy}
+              </q>
             )}
             {!readOnly && canApply && (
               <Button
@@ -239,7 +244,7 @@ function IssueCard({
                   })
                 }
               >
-                {applying ? <Spinner /> : <WandSparkles data-icon="inline-start" />}
+                {applying ? <Spinner className="motion-reduce:animate-none" /> : <WandSparkles data-icon="inline-start" />}
                 Use this wording
               </Button>
             )}
@@ -257,7 +262,7 @@ function IssueCard({
               Exception by {f.disposition.actorLabel ?? "a member"}
               {f.disposition.carried ? " (carried from the previous version)" : ""}
             </div>
-            {f.disposition.note && <p className="mt-0.5">{f.disposition.note}</p>}
+            {f.disposition.note && <LongText text={f.disposition.note} className="mt-0.5" />}
             {!readOnly && (
               <Button
                 type="button"
@@ -272,7 +277,7 @@ function IssueCard({
                   })
                 }
               >
-                {reopening ? <Spinner /> : <RotateCcw data-icon="inline-start" />}
+                {reopening ? <Spinner className="motion-reduce:animate-none" /> : <RotateCcw data-icon="inline-start" />}
                 Reopen
               </Button>
             )}
@@ -366,7 +371,7 @@ function DismissForm({ finding: f, onClose }: { finding: AdFinding; onClose: () 
           Cancel
         </Button>
         <Button type="submit" size="sm" disabled={pending || !noteOk || !reasonOk}>
-          {pending ? <Spinner /> : null}
+          {pending ? <Spinner className="motion-reduce:animate-none" /> : null}
           Confirm
         </Button>
       </div>
@@ -382,9 +387,13 @@ function DismissedCard({ finding: f, readOnly, onSelect, selected }: { finding: 
       <button type="button" onClick={onSelect} className="flex w-full flex-wrap items-center gap-x-2 gap-y-1 text-left focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:outline-none">
         <SeverityWord severity={f.severity} className="text-muted-foreground" />
         <span className="font-medium line-through decoration-muted-foreground/60">{issueTitle(f)}</span>
-        {f.quote && <q className="truncate text-muted-foreground [quotes:'“'_'”']">{f.quote}</q>}
+        {f.quote && (
+          <q className="min-w-0 max-w-full truncate text-muted-foreground [quotes:'“'_'”']" dir="auto">
+            {f.quote}
+          </q>
+        )}
       </button>
-      <div className="mt-1 text-xs text-muted-foreground">
+      <div className="mt-1 break-words text-xs text-muted-foreground">
         {reason ? `${reason} · ` : ""}
         by {f.disposition?.actorLabel ?? "a member"}
         {f.disposition?.carried ? " (carried from the previous version)" : ""}
@@ -405,7 +414,7 @@ function DismissedCard({ finding: f, readOnly, onSelect, selected }: { finding: 
             })
           }
         >
-          {pending ? <Spinner /> : <RotateCcw data-icon="inline-start" />}
+          {pending ? <Spinner className="motion-reduce:animate-none" /> : <RotateCcw data-icon="inline-start" />}
           Undo
         </Button>
       )}

@@ -70,11 +70,11 @@ function TriageItem({ item, now }: { item: TriageRow; now: number }) {
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
         <Button type="button" size="sm" variant="outline" disabled={pending} onClick={() => answer(true)} aria-label={`Yes, ${item.title} is an ad`}>
-          {pending && choice === "yes" ? <Spinner /> : <Check data-icon="inline-start" />}
+          {pending && choice === "yes" ? <Spinner className="motion-reduce:animate-none" /> : <Check data-icon="inline-start" />}
           Yes
         </Button>
         <Button type="button" size="sm" variant="ghost" disabled={pending} onClick={() => answer(false)} aria-label={`No, ${item.title} is not an ad`}>
-          {pending && choice === "no" ? <Spinner /> : <X data-icon="inline-start" />}
+          {pending && choice === "no" ? <Spinner className="motion-reduce:animate-none" /> : <X data-icon="inline-start" />}
           No
         </Button>
       </div>

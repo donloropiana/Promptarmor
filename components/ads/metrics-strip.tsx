@@ -9,7 +9,7 @@ import { formatUsd, pluralise, providerName, relativeTime } from "./format";
 /** "7 need review · 2 revisions in · synced from 4 accounts 2 min ago" */
 export function SummaryLine({ summary }: { summary: AdsSummary }) {
   const parts: string[] = [];
-  parts.push(summary.needReview === 0 ? "Nothing waiting for review" : `${summary.needReview} need${summary.needReview === 1 ? "s" : ""} review`);
+  parts.push(summary.needReview === 0 ? "Nothing waiting for review" : `${summary.needReview.toLocaleString("en-US")} need${summary.needReview === 1 ? "s" : ""} review`);
   if (summary.revisionsIn > 0) parts.push(`${pluralise(summary.revisionsIn, "revision")} in`);
   if (summary.connectedAccounts > 0) {
     parts.push(

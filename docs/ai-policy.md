@@ -25,7 +25,7 @@ Notes
 - `coverage.rules_checked` in `off` mode counts only the rules the deterministic checks can evaluate (the offer-terms rule(s) and HIDDEN-TEXT); the rest are `not_checked` in `rule_results`. In `live`, `replay` and `reused` every applicable rule counts as checked.
 - Images and scanned PDFs need a model to transcribe; in `off`/`replay` they complete with no text checked and `input_metadata.transcription_skipped = true`.
 - "Ask about this ad" answers "off in test mode, nothing was spent" outside `live`.
-- `GET /api/health` reports `ai.mode`, `ai.model_calls` and `ai.check_model` so a deploy can be checked without reading env.
+- `GET /api/health` reports `ai.mode`, `ai.model_calls` and `ai.check_model` to a signed-in user (or the cron bearer) so a deploy can be checked without reading env; anonymous callers get only `{ ok, time }`.
 - Recordings are read from `<cwd>/fixtures/recorded`. On Vercel that folder is only present when traced into the function bundle (`outputFileTracingIncludes` in next.config.ts); replay is meant for laptops and demos, production runs `live`.
 
 ## Reuse ($0)

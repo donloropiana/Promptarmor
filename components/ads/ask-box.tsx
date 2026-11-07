@@ -50,7 +50,7 @@ export function AskBox({ versionId, versionNo }: { versionId: string; versionNo:
       )}
       {pending && (
         <p className="mb-2 inline-flex items-center gap-2 text-sm text-muted-foreground" aria-live="polite">
-          <Spinner className="size-3.5" /> Reading V{versionNo}…
+          <Spinner className="size-3.5 motion-reduce:animate-none" /> Reading V{versionNo}…
         </p>
       )}
       {error && (
@@ -82,7 +82,7 @@ export function AskBox({ versionId, versionNo }: { versionId: string; versionNo:
           maxLength={1000}
         />
         <Button type="submit" size="icon" variant="outline" aria-label="Ask" disabled={pending || question.trim().length < 2}>
-          {pending ? <Spinner /> : <Send />}
+          {pending ? <Spinner className="motion-reduce:animate-none" /> : <Send />}
         </Button>
       </form>
       <p className="mt-2 text-xs text-muted-foreground">Reads and answers. Can&apos;t approve, reject or change rules.</p>

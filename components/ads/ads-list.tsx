@@ -12,7 +12,7 @@ import type { AdListRow, SkippedRow, TriageRow } from "@/lib/data/ads";
 
 import { AdRow } from "./ad-row";
 import { AutoRefresh } from "./auto-refresh";
-import { TABS, type Tab } from "./format";
+import { LIST_CAP, TABS, type Tab } from "./format";
 import { LIST_SHORTCUTS, ShortcutsDialog, isTypingTarget } from "./shortcuts-dialog";
 import { SkippedLine, TriageRows } from "./triage-rows";
 
@@ -31,6 +31,7 @@ export function AdsList({
   triage,
   skipped,
   now,
+  truncated = false,
 }: {
   rows: AdListRow[];
   counts: Record<Tab, number>;
@@ -40,10 +41,23 @@ export function AdsList({
   skipped: SkippedRow[];
   /** Server render time, so relative ages match the data. */
   now: number;
+  /** The workspace has more ads than one read loads (the oldest are left out). */
+  truncated?: boolean;
 }) {
   const router = useRouter();
   const [showShortcuts, setShowShortcuts] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
+  const navRef = useRef<HTMLElement>(null);
+
+  // On a phone the tab strip scrolls sideways: keep the current tab in view
+  // (only the strip's own scroll moves, never the page).
+  useEffect(() => {
+    const nav = navRef.current;
+    const el = nav?.querySelector<HTMLElement>('[aria-current="page"]');
+    if (!nav || !el) return;
+    const left = el.offsetLeft - nav.offsetLeft;
+    if (left < nav.scrollLeft || left + el.offsetWidth > nav.scrollLeft + nav.clientWidth) nav.scrollLeft = Math.max(0, left - 8);
+  }, [tab]);
 
   // Real ads first (worst first), then samples under their own heading so
   // they are never mistaken for work and never count.
@@ -88,7 +102,7 @@ export function AdsList({
     <div className="space-y-3">
       <AutoRefresh active={anyChecking} />
       <div className="flex items-center justify-between gap-2">
-        <nav aria-label="Ad status" className="-mx-1 flex min-w-0 gap-1 overflow-x-auto px-1 py-0.5">
+        <nav ref={navRef} aria-label="Ad status" className="-mx-1 flex min-w-0 gap-1 overflow-x-auto px-1 py-0.5">
           {TABS.map((t) => {
             const active = t.key === tab;
             const n = counts[t.key];
@@ -103,7 +117,7 @@ export function AdsList({
                 )}
               >
                 {t.label}
-                <span className={cn("tabular-nums", active ? "text-foreground/70" : "text-muted-foreground/80")}>{n}</span>
+                <span className={cn("tabular-nums", active ? "text-foreground/70" : "text-muted-foreground/80")}>{n.toLocaleString("en-US")}</span>
               </Link>
             );
           })}
@@ -154,6 +168,11 @@ export function AdsList({
       )}
 
       {tab === "needs_review" && <SkippedLine items={skipped} now={now} />}
+      {truncated && (
+        <p className="px-1 text-xs text-muted-foreground" role="note">
+          Showing the newest {LIST_CAP.toLocaleString("en-US")} ads. Older ones still open from their links and from the audit export.
+        </p>
+      )}
 
       <ShortcutsDialog open={showShortcuts} onOpenChange={setShowShortcuts} shortcuts={LIST_SHORTCUTS} />
     </div>

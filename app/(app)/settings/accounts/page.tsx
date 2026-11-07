@@ -58,7 +58,8 @@ async function AccountsContent() {
           <div className="flex flex-col gap-2">
             <ConnectButtons profileId={profileId} connectedIntegrations={mine} />
             <p className="text-xs text-muted-foreground">
-              One click each. Google asks twice (Gmail, then Drive); Microsoft asks for Outlook, then OneDrive.
+              One click each. Google asks twice (Gmail, then Drive); Microsoft asks for Outlook, then OneDrive. You sign in on Google&apos;s or
+              Microsoft&apos;s own page, opened through Nango (our connector service); we never see your password.
             </p>
           </div>
         </div>

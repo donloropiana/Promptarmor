@@ -1,7 +1,6 @@
 "use client";
 
 import { ArrowLeft, Ban, ClockAlert, Copy, FlaskConical, Keyboard, MailCheck, Recycle, RefreshCw, ShieldOff, Sparkles, TrendingUp } from "lucide-react";
-import { cn } from "cn";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, useTransition } from "react";
 import { toast } from "sonner";
@@ -22,6 +21,7 @@ import { HiddenTextAlert } from "./hidden-text-alert";
 import { History } from "./history";
 import { IssuesPanel, issueTitle } from "./issues-panel";
 import { LocalDateTime, useLocalDateTime } from "./local-time";
+import { LongText } from "./long-text";
 import { MetaChips } from "./meta-chips";
 import { ReviewSession } from "./review-session";
 import { AD_SHORTCUTS, ShortcutsDialog, isTypingTarget } from "./shortcuts-dialog";
@@ -73,6 +73,9 @@ export function AdPage({ detail, userId }: { detail: AdDetail; userId: string })
   const runFailed = Boolean(latestRun && (latestRun.status === "failed" || latestRun.status === "declined_budget"));
 
   const blocked = blockingReason(detail);
+  // For a PDF or image with no text layer: did a model read it as an image?
+  const fileRead: "transcribed" | "unread" | "unknown" = detail.checking || !latestRun ? "unknown" : latestRun.status === "complete" && latestRun.transcribed ? "transcribed" : "unread";
+  const nothingToCheck = (detail.latest.content.format === "pdf" || detail.latest.content.format === "image") && !detail.latest.extractedText.trim() && fileRead === "unread";
   const select = useCallback((id: string | null) => {
     setSelectedId(id);
     if (id) {
@@ -147,6 +150,7 @@ export function AdPage({ detail, userId }: { detail: AdDetail; userId: string })
           channel={detail.channel}
           view={creativeView}
           onViewChange={setCreativeView}
+          fileRead={fileRead}
         />
       )}
     </div>
@@ -250,11 +254,13 @@ export function AdPage({ detail, userId }: { detail: AdDetail; userId: string })
             onFormFor={setFormFor}
             readOnly={readOnly}
             emptyNote={
-              !detail.aiScreened
-                ? "The AI check did not run and the product-terms check found nothing. Read the ad yourself before approving."
-                : latestRun?.mode === "off"
-                  ? "The product-terms check found nothing; the AI step is off on this server. Read the ad yourself before approving."
-                  : undefined
+              nothingToCheck
+                ? "No text could be read from this file and nothing read it as an image, so there was nothing to check. Open the Preview and review it by hand before approving."
+                : !detail.aiScreened
+                  ? "The AI check did not run and the product-terms check found nothing. Read the ad yourself before approving."
+                  : latestRun?.mode === "off"
+                    ? "The product-terms check found nothing; the AI step is off on this server. Read the ad yourself before approving."
+                    : undefined
             }
           />
         )}
@@ -283,13 +289,16 @@ export function AdPage({ detail, userId }: { detail: AdDetail; userId: string })
           </Button>
         </div>
         <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
-          <div className="min-w-0">
-            <h1 className="text-lg font-semibold leading-tight tracking-tight">{detail.title}</h1>
+          <div className="min-w-0 flex-1 basis-64">
+            {/* A headline can be a 400-character URL: break anywhere rather than scroll sideways. */}
+            <h1 className="text-lg font-semibold leading-tight tracking-tight [overflow-wrap:anywhere]" dir="auto">
+              {detail.title}
+            </h1>
             <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
               <span className="font-mono">
                 V{detail.latest.versionNo} · {shortSha(detail.latest.contentSha256)}
               </span>
-              <span>
+              <span className="min-w-0 max-w-full [overflow-wrap:anywhere]">
                 {detail.isSample ? (
                   <span className="inline-flex items-center gap-1">
                     <Sparkles aria-hidden className="size-3" /> Sample ad
@@ -322,11 +331,12 @@ export function AdPage({ detail, userId }: { detail: AdDetail; userId: string })
             </ResizablePanel>
           </ResizablePanelGroup>
         ) : (
-          <div className="grid md:grid-cols-[55%_45%]">
+          // A flex column, not an auto grid track: an unbreakable 400-character word would widen an auto track past the phone.
+          <div className="flex min-w-0 flex-col">
             {/* Stacked: the pinned alert comes first, before the creative, so it is never below the fold. */}
             {detail.alerts.length > 0 && <div className="p-4 pb-0 sm:p-5 sm:pb-0">{alert}</div>}
             {left}
-            <div className="border-t md:border-t-0 md:border-l">{right}</div>
+            <div className="border-t">{right}</div>
           </div>
         )}
       </div>
@@ -348,7 +358,7 @@ function CheckStatus({ detail, openCount }: { detail: AdDetail; openCount: numbe
   if (detail.checking) {
     return (
       <div className="flex items-start gap-3 rounded-xl border bg-card p-4" role="status" aria-live="polite">
-        <Spinner className="mt-0.5 size-4" />
+        <Spinner className="mt-0.5 size-4 motion-reduce:animate-none" />
         <div className="min-w-0">
           <div className="text-sm font-medium">Checking V{v}…</div>
           <p className="text-sm text-muted-foreground">{stageLabel(run?.stage, run?.status)}. Usually under a minute. Issues appear here as soon as it finishes.</p>
@@ -360,7 +370,9 @@ function CheckStatus({ detail, openCount }: { detail: AdDetail; openCount: numbe
 
   const fromCheck = detail.findings.filter((f) => f.origin === "ai").length;
   const found = fromCheck > 0 ? `found ${fromCheck} issue${fromCheck === 1 ? "" : "s"}, listed below` : "found nothing";
-  const ranLine = `The product-terms check still ran and ${found}.`;
+  // A PDF or image with no text layer that no model read: there were no words to check.
+  const noTextFile = (detail.latest.content.format === "pdf" || detail.latest.content.format === "image") && !detail.latest.extractedText.trim() && !run.transcribed;
+  const ranLine = noTextFile ? "No text could be read from the file, so the product-terms check had nothing to compare." : `The product-terms check still ran and ${found}.`;
 
   if (!detail.aiScreened) {
     const why =
@@ -394,7 +406,11 @@ function CheckStatus({ detail, openCount }: { detail: AdDetail; openCount: numbe
         <FlaskConical aria-hidden className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
         <div className="min-w-0 flex-1">
           <div className="text-sm font-medium">AI check skipped (test mode)</div>
-          <p className="text-sm text-muted-foreground">This server runs with the AI step off, so only the product-terms check ran; it {found}. No AI spend.</p>
+          <p className="text-sm text-muted-foreground">
+            {noTextFile
+              ? "This server runs with the AI step off, and no text could be read from the file, so nothing was checked. Read it yourself before deciding. No AI spend."
+              : `This server runs with the AI step off, so only the product-terms check ran; it ${found}. No AI spend.`}
+          </p>
         </div>
       </div>
     );
@@ -468,7 +484,7 @@ function WaitingForRevision({ detail }: { detail: AdDetail }) {
                 })
               }
             >
-              {pending ? <Spinner /> : <RefreshCw data-icon="inline-start" />}
+              {pending ? <Spinner className="motion-reduce:animate-none" /> : <RefreshCw data-icon="inline-start" />}
               Simulate revision from Gmail
             </Button>
             <span className="rounded border px-1.5 text-[10px] uppercase tracking-wide text-muted-foreground">demo</span>
@@ -486,9 +502,9 @@ function ApprovalRecord({ detail }: { detail: AdDetail }) {
       <div className="text-sm font-medium">
         Approved V{a.versionNo ?? "?"} · <span className="font-mono">{shortSha(a.contentSha256)}</span>
       </div>
-      <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+      <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 text-sm">
         <dt className="text-muted-foreground">By</dt>
-        <dd>
+        <dd className="min-w-0 [overflow-wrap:anywhere]">
           {a.approverLabel}
           {a.selfApproved ? " (self-approval)" : ""}
         </dd>
@@ -516,17 +532,17 @@ function ApprovalRecord({ detail }: { detail: AdDetail }) {
           {a.exceptions.map((e, i) => {
             const f = detail.findings.find((x) => x.id === e.finding_id);
             return (
-              <li key={i} className="rounded-lg border p-2 text-sm">
+              <li key={i} className="min-w-0 rounded-lg border p-2 text-sm">
                 <div className="text-xs text-muted-foreground">
                   {f?.rule?.title ?? "Issue"} {e.reason ? `· ${String(e.reason).replace(/_/g, " ")}` : ""}
                 </div>
-                <p className={cn("mt-0.5")}>{e.text}</p>
+                <LongText text={e.text ?? ""} className="mt-0.5" />
               </li>
             );
           })}
         </ul>
       )}
-      {a.rationale && <p className="mt-2 text-sm text-muted-foreground">{a.rationale}</p>}
+      {a.rationale && <LongText text={a.rationale} className="mt-2 text-sm text-muted-foreground" />}
     </section>
   );
 }

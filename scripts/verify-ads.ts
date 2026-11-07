@@ -7,7 +7,13 @@
  *
  *   doppler run -p promptarmor -c prd -- env SMOKE_PASSWORD=... \
  *     PLAYWRIGHT_MODULE=$HOME/.bun/install/global/node_modules/playwright \
- *     bun --conditions=react-server scripts/verify-ads.ts [--keep]
+ *     bun --conditions=react-server scripts/verify-ads.ts [--keep] [--stress | --stress-only]
+ *
+ * --stress adds the worst-case pass (scripts/stress-ads.ts data: 300/400-char
+ * headlines, 60 KB text, 40 findings, RTL/CJK/emoji, one emoji, inert HTML,
+ * image-only PDF, 300-char submitter, 60 rows, a 2,000-char exception) plus
+ * the intake refusals (whitespace, 5 MB file, 3.9 MB PDF) at 1280 and 390px;
+ * --stress-only runs just that. Stress ads are retired at the end unless --keep.
  *
  * Env: SMOKE_EMAIL (default promptarmortwo+reviewer@gmail.com), SMOKE_PASSWORD
  * (required, never committed), VERIFY_BASE_URL (default http://localhost:3102),
@@ -31,6 +37,8 @@ import { createAd } from "@/lib/intake/ads";
 import { getSampleAd } from "@/lib/seed/samples";
 import { requireSupabaseAdminClient } from "@/lib/supabase/admin";
 
+import { BULK_COUNT, LONG_SUBMITTER_EMAIL, LONG_SUBMITTER_NAME, approveWithLongException, ensureStressAds, makePdf, retireStressAds, type StressAd } from "./stress-ads";
+
 const BASE = (process.env.VERIFY_BASE_URL ?? "http://localhost:3102").replace(/\/$/, "");
 const EMAIL = process.env.SMOKE_EMAIL ?? "promptarmortwo+reviewer@gmail.com";
 const PASSWORD = process.env.SMOKE_PASSWORD;
@@ -38,6 +46,8 @@ const SCREENS = path.resolve(process.env.VERIFY_SCREENS ?? ".verify-screens");
 const PROFILE_ID = process.env.VERIFY_PROFILE ?? "cf7d66e9-54d5-4b99-ac6f-89d760a20731";
 const USER_ID = process.env.VERIFY_USER ?? "88b5b90e-3f4b-46a2-8c50-333240cbb671";
 const KEEP = process.argv.includes("--keep");
+const STRESS = process.argv.includes("--stress") || process.argv.includes("--stress-only");
+const STRESS_ONLY = process.argv.includes("--stress-only");
 
 const RATIONALE = "Read V2 in full against PL-1 terms: the rate now matches, approval claims are gone, payment terms accepted for this channel.";
 const DISMISS_NOTE = "Checked PL-1 terms: this wording is accurate for the current rate sheet and the product team confirmed it in writing.";
@@ -69,6 +79,14 @@ type Locator = {
   boundingBox: () => Promise<{ x: number; y: number; width: number; height: number } | null>;
   scrollIntoViewIfNeeded: () => Promise<void>;
   evaluate: <T>(fn: string) => Promise<T>;
+  setInputFiles: (files: { name: string; mimeType: string; buffer: Buffer }) => Promise<void>;
+};
+
+type Frame = {
+  locator: (selector: string) => Locator;
+  evaluate: <T>(fn: string) => Promise<T>;
+  title: () => Promise<string>;
+  url: () => string;
 };
 
 type Page = {
@@ -87,7 +105,8 @@ type Page = {
   evaluate: <T>(fn: string) => Promise<T>;
   keyboard: { press: (key: string) => Promise<void>; type: (text: string) => Promise<void> };
   mouse: { move: (x: number, y: number) => Promise<void> };
-  on: (event: string, handler: (arg: { text: () => string; type: () => string } & Error) => void) => void;
+  on: (event: string, handler: (arg: { text: () => string; type: () => string; url: () => string; failure: () => { errorText: string } | null } & Error) => void) => void;
+  frames: () => Frame[];
   setViewportSize: (size: { width: number; height: number }) => Promise<void>;
   viewportSize: () => { width: number; height: number } | null;
   close: () => Promise<void>;
@@ -566,17 +585,340 @@ async function desktopHistoryCheck(page: Page, ad: TestAd) {
   record("ad (1280): History not hidden under the decision bar", Boolean(hBox && bBox && hBox.y + hBox.height <= bBox.y + 1), hBox && bBox ? `history ends ${Math.round(hBox.y + hBox.height)}, bar starts ${Math.round(bBox.y)}` : "missing");
 }
 
+
+// ---------------------------------------------------------------------------
+// Worst-case data (break-ui): scripts/stress-ads.ts
+// ---------------------------------------------------------------------------
+
+const STRESS_HOSTS = /evil-(redirect|cdn|exfil|tracker|form|landing|frame|object)\.example/;
+
+/** Elements whose content is wider than their box: text that escaped instead of wrapping or truncating. */
+async function overflowingElements(page: Page, within = "main"): Promise<string[]> {
+  return page.evaluate<string[]>(`(() => {
+    const root = document.querySelector(${JSON.stringify(within)}) || document.body;
+    const out = [];
+    for (const el of root.querySelectorAll('*')) {
+      if (el.closest('[data-slot="sheet-content"], [role="dialog"], iframe, pre')) continue;
+      const cs = getComputedStyle(el);
+      if (cs.overflowX !== 'visible') continue;
+      // Content past the right edge of the viewport is the break; a full-bleed
+      // bar or a focus-ring gutter with negative margins is not.
+      const rect = el.getBoundingClientRect();
+      if (el.scrollWidth > el.clientWidth + 2 && el.clientWidth > 0 && rect.left + el.scrollWidth > window.innerWidth + 1) {
+        const tag = el.tagName.toLowerCase();
+        const text = (el.textContent || '').trim().slice(0, 40);
+        out.push(tag + (el.className && typeof el.className === 'string' ? '.' + el.className.split(/\\s+/).slice(0, 2).join('.') : '') + ' "' + text + '" ' + el.scrollWidth + '>' + el.clientWidth);
+      }
+    }
+    return out.slice(0, 8);
+  })()`);
+}
+
+async function stressListChecks(page: Page, ads: StressAd[], width: number) {
+  await page.setViewportSize({ width, height: width < 600 ? 844 : 800 });
+  const t0 = Date.now();
+  await page.goto(`${BASE}/ads`, { waitUntil: "networkidle", timeout: 90_000 });
+  await settled(page);
+  const loadMs = Date.now() - t0;
+  const rows = page.locator("a[data-ad-row]");
+  const rowCount = await rows.count();
+  record(`stress list (${width}): ${rowCount} rows rendered in ${loadMs} ms`, rowCount >= ads.length && loadMs < 15_000, `${rowCount} rows, expected >= ${ads.length}`);
+  await noHorizontalScroll(page, `stress list (${width})`);
+  const spill = await overflowingElements(page);
+  record(`stress list (${width}): no element wider than its box`, spill.length === 0, spill.join(" | "));
+  const text = await bodyText(page);
+  record(`stress list (${width}): no relative time in the future`, !/\bin \d+ (min|h|d)\b/.test(text));
+
+  // Rows for the nasty titles: visible, truncated with the full title on hover.
+  for (const key of ["headline-300", "headline-400-nospace", "rtl-cjk-emoji", "one-emoji", "long-submitter", "findings-40", "image-only-pdf"]) {
+    const ad = ads.find((a) => a.key === key);
+    if (!ad) continue;
+    const row = page.locator(`a[data-ad-row][href="/ads/${ad.assetId}"]`);
+    const box = await row.boundingBox();
+    const titleEl = row.locator("[data-ad-title]");
+    const titleAttr = await titleEl.getAttribute("title").catch(() => null);
+    const fits = Boolean(box && box.width <= width + 1);
+    record(`stress list (${width}): row "${key}" fits and keeps the full title on hover`, fits && Boolean(titleAttr && titleAttr.length >= Math.min(ad.title.length, 40)), box ? `w ${Math.round(box.width)} title ${titleAttr?.length ?? 0} chars` : "no row");
+    if (key === "findings-40") {
+      const rowText = await row.innerText();
+      record(`stress list (${width}): 40-finding row shows the count`, /40\s*(critical)?/.test(rowText), rowText.replace(/\s+/g, " ").slice(0, 120));
+    }
+    if (key === "image-only-pdf") {
+      const rowText = await row.innerText();
+      record(`stress list (${width}): image-only PDF row says no text was read (not "No open issues")`, /No text could be read/.test(rowText) && !/No open issues/.test(rowText), rowText.replace(/\s+/g, " ").slice(0, 120));
+    }
+  }
+
+  // J walks every row; K comes back; the last row is reachable.
+  await page.mouse.move(5, 5);
+  await page.keyboard.press("Escape");
+  for (let i = 0; i < rowCount; i++) await page.keyboard.press("j");
+  const last = await page.evaluate<string | null>("document.activeElement ? document.activeElement.getAttribute('href') : null");
+  const lastHref = await rows.last().getAttribute("href");
+  record(`stress list (${width}): J reaches the last of ${rowCount} rows`, Boolean(last) && last === lastHref, `${last}`);
+  const inView = await page.evaluate<boolean>("(() => { const r = document.activeElement.getBoundingClientRect(); return r.top >= 0 && r.bottom <= window.innerHeight; })()");
+  record(`stress list (${width}): focused row scrolled into view`, inView);
+  await shot(page, "stress-list");
+}
+
+async function stressAdPage(page: Page, ad: StressAd, width: number, extra?: (text: string) => Promise<void>) {
+  await page.setViewportSize({ width, height: width < 600 ? 844 : 800 });
+  await page.goto(`${BASE}/ads/${ad.assetId}`, { waitUntil: "networkidle", timeout: 90_000 });
+  await settled(page);
+  await page.waitForTimeout(300);
+  await noHorizontalScroll(page, `stress ad "${ad.key}" (${width})`);
+  const spill = await overflowingElements(page);
+  record(`stress ad "${ad.key}" (${width}): no element wider than its box`, spill.length === 0, spill.join(" | "));
+  const text = await bodyText(page);
+  record(`stress ad "${ad.key}" (${width}): no relative time in the future`, !/\bin \d+ (min|h|d)\b/.test(text));
+  // The sticky decision bar never hides the end of the page.
+  await page.evaluate<void>("window.scrollTo(0, document.body.scrollHeight)");
+  await page.waitForTimeout(250);
+  const history = page.getByRole("region", { name: "History" });
+  const hBox = await history.boundingBox();
+  const bBox = await page.locator("[data-decision-bar]").boundingBox();
+  record(`stress ad "${ad.key}" (${width}): History not hidden under the decision bar`, Boolean(hBox && bBox && hBox.y + hBox.height <= bBox.y + 1), hBox && bBox ? `history ends ${Math.round(hBox.y + hBox.height)}, bar starts ${Math.round(bBox.y)}` : "missing");
+  if (extra) await extra(text);
+  await shot(page, `stress-ad-${ad.key}`);
+}
+
+async function stressFlow(page: Page, ads: StressAd[]) {
+  const by = (key: string) => ads.find((a) => a.key === key);
+
+  for (const width of [1280, 390]) await stressListChecks(page, ads, width);
+
+  // Headlines: 300 chars with spaces, 400 without.
+  for (const key of ["headline-300", "headline-400-nospace"]) {
+    const ad = by(key);
+    if (!ad) continue;
+    for (const width of [1280, 390]) {
+      await stressAdPage(page, ad, width, async () => {
+        const h1 = page.locator("h1").first();
+        const box = await h1.boundingBox();
+        record(`stress ad "${key}" (${width}): headline wraps inside the viewport`, Boolean(box && box.x >= 0 && box.x + box.width <= width + 1), box ? `x ${Math.round(box.x)} w ${Math.round(box.width)}` : "no h1");
+      });
+    }
+  }
+
+  // 60 KB in 200 paragraphs: renders, one "Body" label per run, highlight still works.
+  const big = by("text-60kb");
+  if (big) {
+    await stressAdPage(page, big, 1280, async (text) => {
+      const labels = await page.locator("section div.uppercase").count();
+      record("stress ad \"text-60kb\": section labels collapsed (not one per paragraph)", labels > 0 && labels < 20, `${labels} labels`);
+      record("stress ad \"text-60kb\": the whole text is on the page", /Section 28\./.test(text) && /Unsubscribe/.test(text));
+    });
+    await stressAdPage(page, big, 390);
+  }
+
+  // 40 findings: every card renders, the heading counts them, selecting one highlights.
+  const f40 = by("findings-40");
+  if (f40) {
+    await stressAdPage(page, f40, 1280, async (text) => {
+      const cards = await page.locator("section[aria-label='Issues'] [data-finding-id]").count();
+      record("stress ad \"findings-40\": 40 issue cards", cards === 40, `${cards} cards`);
+      record("stress ad \"findings-40\": heading says 40 open", /40 open/.test(text));
+      await page.locator("section[aria-label='Issues'] [data-finding-id]").nth(39).locator("button").first().click();
+      const selected = await page.locator("mark[data-selected]").first().waitFor({ state: "visible", timeout: 5_000 }).then(() => true).catch(() => false);
+      record("stress ad \"findings-40\": selecting the 40th issue highlights its words", selected);
+      await page.keyboard.press("Escape");
+      await page.mouse.move(5, 5);
+      await page.keyboard.press("r");
+      const sheet = page.getByRole("dialog", { name: /Request changes/ });
+      const open = await sheet.waitFor({ state: "visible", timeout: 5_000 }).then(() => true).catch(() => false);
+      if (open) {
+        const note = await sheet.locator("#request-text").inputValue();
+        record("stress ad \"findings-40\": request-changes note lists all 40", (note.match(/^\d+\. /gm) ?? []).length === 40, `${(note.match(/^\d+\. /gm) ?? []).length} numbered items`);
+        await page.keyboard.press("Escape");
+      }
+    });
+    await stressAdPage(page, f40, 390);
+  }
+
+  // Image ads: the 64px thumbnail crops (object-fit cover), never squashes.
+  for (const key of ["image-wide", "image-tall"]) {
+    const ad = by(key);
+    if (!ad) continue;
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto(`${BASE}/ads`, { waitUntil: "networkidle", timeout: 90_000 });
+    await settled(page);
+    // Thumbnails load lazily: bring the row into view and give the signed URL a moment.
+    const thumb = page.locator(`a[data-ad-row][href="/ads/${ad.assetId}"] img`);
+    await thumb.scrollIntoViewIfNeeded().catch(() => undefined);
+    const probe = `(() => { const el = document.querySelector('a[data-ad-row][href="/ads/${ad.assetId}"] img'); if (!el) return null; return { w: el.clientWidth, h: el.clientHeight, nw: el.naturalWidth, nh: el.naturalHeight, fit: getComputedStyle(el).objectFit }; })()`;
+    type Fit = { w: number; h: number; nw: number; nh: number; fit: string };
+    let fit: Fit | null = null;
+    for (let i = 0; i < 20; i++) {
+      fit = await page.evaluate<Fit | null>(probe);
+      if (fit?.nw) break;
+      await page.waitForTimeout(250);
+    }
+    record(`stress list: "${key}" thumbnail is square and crops instead of distorting`, Boolean(fit && fit.fit === "cover" && Math.abs(fit.w - fit.h) <= 1 && fit.nw > 0), fit ? `${fit.w}x${fit.h} box, ${fit.nw}x${fit.nh} image, object-fit ${fit.fit}` : "no thumbnail");
+    await stressAdPage(page, ad, 390, async () => {
+      const big = page.locator("main img[alt^='Ad image']").first();
+      const box = await big.boundingBox();
+      record(`stress ad "${key}" (390): the image fits the viewport`, Boolean(box && box.width <= 390 && box.height <= 844), box ? `${Math.round(box.width)}x${Math.round(box.height)}` : "no image");
+    });
+  }
+
+  // RTL + CJK + emoji, and the one-emoji ad.
+  for (const key of ["rtl-cjk-emoji", "one-emoji"]) {
+    const ad = by(key);
+    if (!ad) continue;
+    await stressAdPage(page, ad, 390, async (text) => {
+      if (key === "rtl-cjk-emoji") record("stress ad \"rtl-cjk-emoji\": Arabic and Japanese text present", /قرض/.test(text) && /個人ローン/.test(text));
+      if (key === "one-emoji") record("stress ad \"one-emoji\": the emoji is the title", /🏦/.test(text));
+    });
+  }
+
+  // Inert HTML: sandbox + CSP, nothing executes, no request leaves for the ad's hosts.
+  const evil = by("evil-html");
+  if (evil) {
+    // A request the policy blocks never reaches the network (Chromium reports
+    // ERR_BLOCKED_BY_CSP); one that resolves DNS or finishes did leave.
+    const leaked: string[] = [];
+    const blocked: string[] = [];
+    page.on("requestfinished", (req) => {
+      if (STRESS_HOSTS.test(req.url())) leaked.push(req.url());
+    });
+    page.on("requestfailed", (req) => {
+      const why = req.failure()?.errorText ?? "";
+      if (!STRESS_HOSTS.test(req.url())) return;
+      if (/^csp$|BLOCKED_BY_CSP|BLOCKED_BY_CLIENT|BLOCKED_BY_RESPONSE/.test(why)) blocked.push(`${req.url()} ${why}`);
+      else leaked.push(`${req.url()} ${why}`);
+    });
+    await stressAdPage(page, evil, 1280, async (text) => {
+      const frame = page.locator("iframe[title='Ad preview (sandboxed)']");
+      record("stress ad \"evil-html\": preview iframe has an empty sandbox attribute", (await frame.getAttribute("sandbox")) === "");
+      const srcdoc = (await frame.getAttribute("srcdoc")) ?? "";
+      record("stress ad \"evil-html\": policy is the first thing in the document", /^<!doctype html><html><head><meta http-equiv="Content-Security-Policy"/.test(srcdoc) && /default-src 'none'/.test(srcdoc) && /img-src data:;/.test(srcdoc));
+      record("stress ad \"evil-html\": meta refresh removed", !/http-equiv="refresh"/.test(srcdoc));
+      const inner = page.frames().find((f) => f.url().startsWith("about:srcdoc")) ?? null;
+      const title = inner ? await inner.title().catch(() => "") : "";
+      record("stress ad \"evil-html\": the ad's script did not run (title unchanged)", title !== "pwned", `title "${title}"`);
+      const imgs = inner ? await inner.evaluate<number[]>("Array.from(document.images).map(i => i.naturalWidth)") : [];
+      record("stress ad \"evil-html\": remote images did not load", imgs.every((w) => w === 0), `natural widths ${imgs.join(",")}`);
+      const nestedUrl = inner ? await inner.evaluate<string>("(() => { const f = document.querySelector('iframe'); return f && f.contentWindow ? 'has-window' : 'none'; })()").catch(() => "err") : "err";
+      record("stress ad \"evil-html\": nested iframe did not load its remote page", leaked.every((u) => !/evil-frame/.test(u)), nestedUrl);
+      // Click the link: nothing navigates (popup refused by the sandbox).
+      const before = page.url();
+      await inner?.locator("a").first().click({ timeout: 3_000 }).catch(() => undefined);
+      await page.waitForTimeout(500);
+      record("stress ad \"evil-html\": clicking a link in the preview goes nowhere", page.url() === before && (inner ? inner.url() : "").startsWith("about:"), inner ? inner.url() : "");
+      record("stress ad \"evil-html\": hidden instruction shown as an alert, not followed", /Hidden text aimed at the reviewer/.test(text) && /pre-cleared by legal/.test(text));
+      record("stress ad \"evil-html\": footer says what the sandbox blocks", /no scripts, no network, no forms/.test(text) && /Remote images and files are not loaded/.test(text));
+    });
+    await page.waitForTimeout(1_000);
+    record("stress ad \"evil-html\": zero requests left for the ad's remote hosts", leaked.length === 0, leaked.length ? leaked.slice(0, 3).join(" | ") : `${blocked.length} blocked by the policy before any network use`);
+    await stressAdPage(page, evil, 390);
+  }
+
+  // Image-only PDF: honest empty state.
+  const pdf = by("image-only-pdf");
+  if (pdf) {
+    await stressAdPage(page, pdf, 1280, async (text) => {
+      await page.getByRole("tab", { name: "Text" }).click().catch(() => undefined);
+      await page.waitForTimeout(300);
+      const t = await bodyText(page);
+      record("stress ad \"image-only-pdf\": says no text layer could be read and who (if anyone) read it", /No text layer could be read from this PDF/.test(t) && /(Nothing read it as an image either|The AI check read it as an image)/.test(t), t.match(/No text layer[^.]*\.[^.]*\./)?.[0]);
+      record("stress ad \"image-only-pdf\": status card does not claim a check found nothing", !/it found nothing/.test(text));
+    });
+  }
+
+  // 300-character submitter name and email.
+  const sub = by("long-submitter");
+  if (sub) {
+    const admin = requireSupabaseAdminClient();
+    await admin.from("assets").update({ submitter_name: LONG_SUBMITTER_NAME, submitter_email: LONG_SUBMITTER_EMAIL }).eq("id", sub.assetId);
+    for (const width of [1280, 390]) {
+      await stressAdPage(page, sub, width, async (text) => {
+        record(`stress ad "long-submitter" (${width}): the 300-char name is on the page`, text.includes("ClearPath personal loan rates"));
+      });
+    }
+    await admin.from("assets").update({ submitter_name: null, submitter_email: LONG_SUBMITTER_EMAIL }).eq("id", sub.assetId);
+    await stressAdPage(page, sub, 390, async (text) => {
+      record("stress ad \"long-submitter\" (390): a 300-char email with no spaces wraps", text.includes("@northwind-industries-holdings-"));
+    });
+  }
+
+  // Approved tab: the 2,000-character exception.
+  const exc = by("exception-2000");
+  if (exc) {
+    const approved = await approveWithLongException(exc.assetId, (m) => console.log(m));
+    if (approved) {
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.goto(`${BASE}/ads?tab=approved`, { waitUntil: "networkidle", timeout: 90_000 });
+      await settled(page);
+      const row = page.locator(`a[data-ad-row][href="/ads/${exc.assetId}"]`);
+      const rowText = await row.innerText().catch(() => "");
+      record("stress approved (390): row shows V1, who and With exceptions", /V1/.test(rowText) && /by /.test(rowText) && /With exceptions/.test(rowText), rowText.replace(/\s+/g, " ").slice(0, 160));
+      await noHorizontalScroll(page, "stress approved tab (390)");
+      const activeTab = await page.locator('nav[aria-label="Ad status"] [aria-current="page"]').boundingBox();
+      record("stress approved (390): the current tab is scrolled into view in the tab strip", Boolean(activeTab && activeTab.x >= 0 && activeTab.x + activeTab.width <= 390), activeTab ? `x ${Math.round(activeTab.x)} w ${Math.round(activeTab.width)}` : "no active tab");
+      await shot(page, "stress-approved-list");
+      await stressAdPage(page, exc, 390, async (text) => {
+        record("stress approved (390): approval record shows the 2,000-char exception in full", /Reviewed with product and legal on the Friday call/.test(text) && (text.match(/named owner/g) ?? []).length >= 2);
+      });
+      await stressAdPage(page, exc, 1280);
+    } else {
+      record("stress approved: could not approve the exception ad (see log)", false);
+    }
+  }
+
+  // Intake refusals, through the real New ad dialog.
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto(`${BASE}/ads`, { waitUntil: "networkidle", timeout: 90_000 });
+  await settled(page);
+  await page.getByRole("button", { name: "New ad" }).click();
+  const dialog = page.getByRole("dialog", { name: "New ad" });
+  await dialog.waitFor({ state: "visible", timeout: 5_000 });
+  await dialog.getByRole("tab", { name: "Paste text" }).click();
+  await dialog.locator("#new-ad-text").fill("   \n\n\t   ​​​​​​​​​​​   ");
+  record("stress intake: whitespace-only paste keeps the button disabled", await dialog.getByRole("button", { name: "Check this ad" }).isDisabled());
+  await dialog.getByRole("tab", { name: "File" }).click();
+  const input = dialog.locator("input[type=file]");
+  await input.setInputFiles({ name: "blank.txt", mimeType: "text/plain", buffer: Buffer.from("   \n\n   \t  \n") });
+  // Intake also caps ads per member per hour; a stress run can hit it. That
+  // refusal is plain copy too, so it counts, but the file checks need room.
+  const blankMsg = await waitForText(page, /no readable text|in the last hour/, 20_000);
+  const atQuota = /in the last hour/.test(await bodyText(page));
+  record("stress intake: whitespace-only .txt refused with plain copy", blankMsg, atQuota ? "hourly limit reached first: refusal copy is the quota message" : (await bodyText(page)).match(/[^.]*no readable text[^.]*\./)?.[0]);
+  await input.setInputFiles({ name: "huge.pdf", mimeType: "application/pdf", buffer: Buffer.alloc(5 * 1024 * 1024) });
+  const tooBig = await waitForText(page, /over 4 MB/, 10_000);
+  record("stress intake: 5 MB file refused before upload", tooBig);
+  await shot(page, "stress-intake-refusals");
+  await input.setInputFiles({ name: "fall-flyer.pdf", mimeType: "application/pdf", buffer: Buffer.from(makePdf({ kind: "text", targetBytes: 3_900_000 })) });
+  const accepted = await page.waitForURL(/\/ads\/[0-9a-f-]{36}/, { timeout: 120_000 }).then(() => true).catch(() => false);
+  const afterText = await bodyText(page);
+  const quotaHit = !accepted && /in the last hour/.test(afterText);
+  record("stress intake: 3.9 MB PDF accepted (opens its ad page)", accepted || quotaHit, accepted ? page.url() : quotaHit ? "not tried: this member is at the hourly ad limit (re-run later)" : afterText.match(/did not go through[^.]*\./)?.[0] ?? "no redirect");
+  if (accepted) {
+    const id = page.url().split("/ads/")[1];
+    const admin = requireSupabaseAdminClient();
+    await admin.from("assets").update({ title: "[test] stress 3.9 MB PDF upload", audience: "sample" }).eq("id", id);
+    ads.push({ key: "pdf-3.9mb", assetId: id, versionId: "", title: "[test] stress 3.9 MB PDF upload", created: true });
+    record("stress intake: uploaded PDF text extracted", await waitForText(page, /Fall 2026 flyer|5\.99% APR/, 30_000));
+  }
+}
+
 // ---------------------------------------------------------------------------
 
 async function main() {
   if (!PASSWORD) throw new Error("Set SMOKE_PASSWORD (never commit it).");
   mkdirSync(SCREENS, { recursive: true });
 
-  console.log("setup: creating [test] sample ads");
   const ads: TestAd[] = [];
-  ads.push(await createTestAd("paid-social-personal-loan"));
-  ads.push(await createTestAd("affiliate-hidden-text"));
-  ads.push(await createTestAd("credit-card-sms"));
+  if (!STRESS_ONLY) {
+    console.log("setup: creating [test] sample ads");
+    ads.push(await createTestAd("paid-social-personal-loan"));
+    ads.push(await createTestAd("affiliate-hidden-text"));
+    ads.push(await createTestAd("credit-card-sms"));
+  }
+  let stressAds: StressAd[] = [];
+  if (STRESS) {
+    console.log(`setup: worst-case ads (${BULK_COUNT} bulk rows + the nasty ones)`);
+    stressAds = await ensureStressAds({ check: true, bulk: true });
+  }
 
   const pw = (await import(process.env.PLAYWRIGHT_MODULE ?? "playwright")) as { chromium: { launch: () => Promise<Browser> } };
   const browser = await pw.chromium.launch();
@@ -591,24 +933,33 @@ async function main() {
 
   try {
     await signIn(page);
-    await listFlow(page, ads);
-    await checkFlow(page, ads[0]);
-    await requestChangesFlow(page, context, ads[0]);
-    await approveFlow(page, ads[0]);
-    await hiddenTextFlow(page, ads[1]);
-    await rejectAndChipsFlow(page, ads[2]);
-    await desktopHistoryCheck(page, ads[1]);
-    await phoneFlow(page, [ads[0], ads[1]]);
+    if (!STRESS_ONLY) {
+      await listFlow(page, ads);
+      await checkFlow(page, ads[0]);
+      await requestChangesFlow(page, context, ads[0]);
+      await approveFlow(page, ads[0]);
+      await hiddenTextFlow(page, ads[1]);
+      await rejectAndChipsFlow(page, ads[2]);
+      await desktopHistoryCheck(page, ads[1]);
+      await phoneFlow(page, [ads[0], ads[1]]);
+    }
+    if (STRESS) await stressFlow(page, stressAds);
   } catch (err) {
     record("flow crashed", false, (err as Error).message);
     await shot(page, "crash").catch(() => undefined);
   } finally {
     await browser.close();
     if (KEEP) console.log("--keep: leaving the [test] ads in place");
-    else await retireTestAds(ads);
+    else {
+      await retireTestAds(ads);
+      if (STRESS) await retireStressAds((m) => console.log(m));
+    }
   }
 
-  const ignorable = (m: string) => /favicon|Download the React DevTools|hydrat.*suppress/i.test(m);
+  // An HTML ad that tries to run scripts or load remote files is meant to trip
+  // the preview's sandbox and policy; the browser logs each block as an error.
+  // Those lines are the defence working (auto-advance can open such an ad in any flow).
+  const ignorable = (m: string) => /favicon|Download the React DevTools|hydrat.*suppress/i.test(m) || /Content Security Policy|sandboxed|about:srcdoc/i.test(m);
   const realConsole = consoleErrors.filter((m) => !ignorable(m));
   record("no browser console errors", realConsole.length === 0, realConsole.length ? realConsole.slice(0, 5).join(" | ").slice(0, 600) : undefined);
   record("no uncaught page errors", pageErrors.length === 0, pageErrors.length ? pageErrors.slice(0, 5).join(" | ").slice(0, 600) : undefined);

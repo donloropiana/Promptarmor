@@ -436,8 +436,26 @@ export async function runAnalysis(runId: string): Promise<void> {
   } catch (err) {
     const message = errorText(err);
     console.error(`[ai/engine] run ${runId} failed:`, message);
-    if (reservation && !settled) await releaseBudget(admin, reservation.requestId);
-    await failRun(admin, runId, friendlyError(message), { profileId: run.profile_id, asset });
+    if (reservation && !settled) {
+      // A model call that ran but produced an unusable answer (NoObjectGeneratedError
+      // carries the usage) still cost money: settle it so the ledger stays honest.
+      const usage = (err as { usage?: { inputTokens?: number; outputTokens?: number } } | null)?.usage;
+      const inputTokens = usage?.inputTokens ?? 0;
+      const outputTokens = usage?.outputTokens ?? 0;
+      if (inputTokens > 0 || outputTokens > 0) {
+        await settleBudget(admin, {
+          requestId: reservation.requestId,
+          costUsd: costUsd(MODELS.check, inputTokens, outputTokens),
+          inputTokens,
+          outputTokens,
+          model: MODELS.check,
+          analysisRunId: runId,
+        });
+      } else {
+        await releaseBudget(admin, reservation.requestId);
+      }
+    }
+    await failRun(admin, runId, friendlyError(err), { profileId: run.profile_id, asset });
     // The product-terms and hidden-text checks do not need the model: keep what they found.
     if (fallback && fallback.findings.length > 0 && asset) {
       try {
@@ -1021,10 +1039,19 @@ async function failRun(admin: Admin, runId: string, message: string, ctx: { prof
 }
 
 /** Plain-English run error; the raw message is kept after a colon for debugging. */
-function friendlyError(raw: string): string {
+/**
+ * The sentence stored on the run and shown on the ad page. Raw provider,
+ * SDK and database messages stay in the server log: they can carry request
+ * ids, URLs and echoed prompt fragments that do not belong in the UI.
+ */
+function friendlyError(err: unknown): string {
+  const raw = errorText(err);
   const known = friendlyAiError(raw);
   if (known) return `The AI check could not run: ${known} A person must review this ad.`;
-  return `The AI check failed: ${raw}`;
+  if (/Download failed|storage/i.test(raw)) return "The AI check could not run: the uploaded file could not be read back from storage. A person must review this ad.";
+  if (/NO_TEXT|no readable text/i.test(raw)) return "The AI check could not run: no readable text was found in the file. A person must review this ad.";
+  const name = err instanceof Error && err.name && err.name !== "Error" ? ` (${err.name})` : "";
+  return `The AI check failed${name}. A person must review this ad.`;
 }
 
 async function logEvent(admin: Admin, profileId: string, assetId: string | null, kind: string, data: Record<string, Json>): Promise<void> {

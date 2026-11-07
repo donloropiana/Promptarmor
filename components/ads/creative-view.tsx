@@ -76,7 +76,7 @@ function MarkedText({
 }) {
   const segments = useMemo(() => segment(text, marks, from ?? 0, to ?? text.length), [text, marks, from, to]);
   return (
-    <p className={cn("whitespace-pre-wrap break-words leading-relaxed", className)}>
+    <p className={cn("whitespace-pre-wrap leading-relaxed [overflow-wrap:anywhere]", className)} dir="auto">
       {segments.map((seg, i) => {
         if (seg.marks.length === 0) return <span key={i}>{seg.text}</span>;
         const primary = seg.marks.find((m) => m.id === selectedId) ?? seg.marks[0];
@@ -154,9 +154,11 @@ function TextCard({
       {ranges.map((r, i) => {
         const isHeadline = /head|title|subject/i.test(r.label);
         const isFine = /disclos|fine|legal|footer|terms/i.test(r.label);
+        // A run of same-labelled sections (a long email body) gets one label, not one per paragraph.
+        const sameAsPrevious = i > 0 && ranges[i - 1].label === r.label;
         return (
-          <section key={r.id} className={cn("px-4 py-3 sm:px-6", i > 0 && "border-t")}>
-            <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{r.label}</div>
+          <section key={r.id} className={cn("px-4 sm:px-6", sameAsPrevious ? "pb-3" : "py-3", i > 0 && !sameAsPrevious && "border-t")}>
+            {!sameAsPrevious && <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{r.label}</div>}
             <MarkedText
               text={text}
               marks={marks}
@@ -173,16 +175,37 @@ function TextCard({
   );
 }
 
-const CSP = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: https:; style-src 'unsafe-inline'; font-src data: https:; form-action 'none'; base-uri 'none'">`;
+/**
+ * The preview frame is `sandbox=""` (no scripts, no forms, no popups, opaque
+ * origin), and this policy stops every network request the markup could
+ * still make: remote images (tracking pixels tell a submitter when a reviewer
+ * opened the ad), stylesheets, fonts, frames, objects. Only inline styles and
+ * data: images render. `<base target="_blank">` turns every link into a
+ * popup, which the sandbox refuses, so nothing navigates; meta refresh is
+ * removed because it would navigate the frame itself.
+ */
+const CSP = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:; form-action 'none'; base-uri 'none'; frame-src 'none'; connect-src 'none'">`;
+const INERT_LINKS = `<base target="_blank"><style>a[target="_self"],a[target="_parent"],a[target="_top"],area{pointer-events:none}</style>`;
+const HEAD_INJECT = `${CSP}${INERT_LINKS}`;
 
-function withCsp(html: string): string {
-  if (/<head[^>]*>/i.test(html)) return html.replace(/<head[^>]*>/i, (m) => `${m}${CSP}`);
-  if (/<html[^>]*>/i.test(html)) return html.replace(/<html[^>]*>/i, (m) => `${m}<head>${CSP}</head>`);
-  return `<!doctype html><html><head>${CSP}</head><body>${html}</body></html>`;
+export function withCsp(html: string): string {
+  const safe = html.replace(/<meta\b[^>]*http-equiv\s*=\s*["']?\s*refresh[^>]*>/gi, "<!-- meta refresh removed -->");
+  // The policy goes first, in a <head> we own, so it applies to everything
+  // after it. The parser merges the ad's own <html>/<head> into ours
+  // (duplicate start tags are ignored, their children still land in the
+  // head), so looking for the ad's <head> is unnecessary and unsafe: the
+  // string "<head>" inside an attribute value would have swallowed the meta.
+  return `<!doctype html><html><head>${HEAD_INJECT}</head>${safe}`;
+}
+
+/** True when the markup references anything off-site that the preview will not load. */
+function hasRemoteAssets(html: string): boolean {
+  return /\b(src|href|srcset|poster|data)\s*=\s*["']?\s*(https?:)?\/\//i.test(html) || /url\(\s*["']?\s*(https?:)?\/\//i.test(html);
 }
 
 function HtmlPreview({ html }: { html: string }) {
   const [tall, setTall] = useState(false);
+  const remote = useMemo(() => hasRemoteAssets(html), [html]);
   return (
     <div className="overflow-hidden rounded-xl border bg-card">
       <iframe
@@ -192,12 +215,32 @@ function HtmlPreview({ html }: { html: string }) {
         srcDoc={withCsp(html)}
         className={cn("w-full bg-white transition-[height] duration-200 motion-reduce:transition-none", tall ? "h-[1400px]" : "h-[560px]")}
       />
-      <div className="flex items-center justify-between border-t px-3 py-1.5 text-xs text-muted-foreground">
-        <span>Rendered in a sandbox: no scripts, no network, no forms.</span>
-        <button type="button" className="underline underline-offset-4 hover:text-foreground" onClick={() => setTall((t) => !t)}>
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t px-3 py-1.5 text-xs text-muted-foreground">
+        <span className="min-w-0">
+          Rendered in a sandbox: no scripts, no network, no forms.
+          {remote ? " Remote images and files are not loaded; the Text view has every word." : ""}
+        </span>
+        <button type="button" className="shrink-0 underline underline-offset-4 hover:text-foreground" onClick={() => setTall((t) => !t)}>
           {tall ? "Shorter" : "Taller"}
         </button>
       </div>
+    </div>
+  );
+}
+
+/** What an empty text view means, said honestly: who (if anyone) read the file. */
+function NoTextNote({ kind, fileRead }: { kind: "PDF" | "image"; fileRead: "transcribed" | "unread" | "unknown" }) {
+  const what = kind === "PDF" ? "No text layer could be read from this PDF" : "No text could be read from this image";
+  return (
+    <div className="rounded-xl border border-dashed bg-card p-4 text-sm text-muted-foreground">
+      <p className="font-medium text-foreground">{what}.</p>
+      <p className="mt-1">
+        {fileRead === "transcribed"
+          ? `The AI check read it as an image instead, so the issues on the right come from what it could make out. Open the ${kind === "PDF" ? "PDF" : "image"} in the Preview and compare.`
+          : fileRead === "unread"
+            ? `Nothing read it as an image either, so no words were checked against the rules or the product terms. Open the Preview and review it by hand before deciding.`
+            : `When the check finishes it will say whether the AI read it as an image. Until then, use the Preview.`}
+      </p>
     </div>
   );
 }
@@ -219,6 +262,7 @@ export function CreativeView({
   channel,
   view,
   onViewChange,
+  fileRead = "unknown",
 }: {
   version: AdVersion;
   findings: AdFinding[];
@@ -229,6 +273,12 @@ export function CreativeView({
   /** Controlled by the parent so selecting an issue can switch to the text view. */
   view: CreativeViewMode;
   onViewChange: (v: CreativeViewMode) => void;
+  /**
+   * For a PDF or image with no text layer: whether a model read it as an
+   * image ("transcribed"), nothing read it ("unread"), or the check has not
+   * finished ("unknown"). Decides what the empty text view says.
+   */
+  fileRead?: "transcribed" | "unread" | "unknown";
 }) {
   const format = version.content.format;
   const text = version.extractedText || version.content.text || "";
@@ -300,7 +350,7 @@ export function CreativeView({
           ))}
         </div>
       ) : (
-        <p className="text-sm text-muted-foreground">No text could be extracted from this PDF, so issues were found by reading it as an image.</p>
+        <NoTextNote kind="PDF" fileRead={fileRead} />
       );
     } else if (format === "image") {
       body = text.trim() ? (
@@ -309,7 +359,7 @@ export function CreativeView({
           <MarkedText text={text} marks={marks} selectedId={selectedId} onSelect={onSelect} className="text-sm" />
         </div>
       ) : (
-        <p className="text-sm text-muted-foreground">No text was read from this image.</p>
+        <NoTextNote kind="image" fileRead={fileRead} />
       );
     } else {
       body = <TextCard version={version} marks={marks} selectedId={selectedId} onSelect={onSelect} />;

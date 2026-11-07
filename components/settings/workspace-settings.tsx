@@ -95,8 +95,8 @@ export function AiCapCard({ settings }: { settings: WorkspaceSettings }) {
         />
       </div>
       <p className="text-xs text-muted-foreground">
-        Resets daily (UTC). When the cap is reached, new ads wait for a manual review instead of an AI check. The cap is set by the operator
-        {settings.aiTrusted ? "; this workspace has trusted headroom" : ""}.
+        Resets daily (UTC). When the cap is reached, new ads still get the rate and hidden-text checks, then wait for a person instead of the AI check. The
+        cap is managed by the service, not from this page{settings.aiTrusted ? "; this workspace has extra headroom as a trusted workspace" : ""}.
       </p>
     </div>
   );

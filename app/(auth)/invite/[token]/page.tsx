@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 
 import { AuthShell, AuthShellSkeleton } from "@/components/auth/auth-shell";
+import { shortDate } from "@/components/shell/format";
 import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { signInPath } from "@/lib/auth/redirect";
@@ -119,7 +120,7 @@ async function InviteContent({ params }: { params: Params }) {
     return (
       <AuthShell
         title="Invitation expired"
-        description={`This invitation to ${row.profile_name} has expired. Ask an owner to resend it.`}
+        description={`This invitation to ${row.profile_name} has expired. Ask an owner to send it again.`}
         footer={<BackHome />}
       />
     );
@@ -147,11 +148,8 @@ async function InviteContent({ params }: { params: Params }) {
     );
   }
 
-  const expires = new Date(row.expires_at).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  // Printed in the workspace time zone like every other date in the app.
+  const expires = shortDate(row.expires_at);
 
   return (
     <AuthShell

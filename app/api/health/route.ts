@@ -1,17 +1,23 @@
+import { timingSafeEqual } from "node:crypto";
+
 import { connection } from "next/server";
 
 import { MODELS } from "@/lib/ai/budget";
 import { getAiMode } from "@/lib/ai/mode";
+import { getCurrentUser } from "@/lib/auth/dal";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 /**
  * GET /api/health
  *
- * Deployment smoke check. Returns booleans only for secrets (never values):
- * which env vars are present, whether the database answers with the service
- * role, and whether the core tables exist. The AI block says which mode the
- * server runs in (live | off | replay, docs/ai-policy.md) and which check
- * model it would use; neither is a secret. Safe to leave public.
+ * Deployment smoke check. Anonymous callers get `{ ok, time }` and nothing
+ * else: which secrets exist, what the stack is made of and which model is in
+ * use are not for the public internet. A signed-in user (any workspace
+ * member, cookie session) or a caller with `Authorization: Bearer
+ * $CRON_SECRET` gets the detail: booleans for secrets (which env vars are
+ * present, never values), whether the database answers with the service
+ * role, whether the core tables exist, the AI mode (live | off | replay,
+ * docs/ai-policy.md) and the check model it would use.
  */
 
 const CORE_TABLES = ["profiles", "profile_members", "assets", "asset_versions", "analysis_runs", "findings", "rules", "offers"] as const;
@@ -20,8 +26,19 @@ function present(name: string): boolean {
   return Boolean(process.env[name]?.trim());
 }
 
-export async function GET(): Promise<Response> {
+function hasCronSecret(request: Request): boolean {
+  const secret = process.env.CRON_SECRET;
+  if (!secret) return false;
+  const header = request.headers.get("authorization") ?? "";
+  const expected = Buffer.from(`Bearer ${secret}`);
+  const provided = Buffer.from(header);
+  return provided.length === expected.length && timingSafeEqual(provided, expected);
+}
+
+export async function GET(request: Request): Promise<Response> {
   await connection();
+  const headers = { "cache-control": "no-store", "x-robots-tag": "noindex" };
+
   const env = {
     SUPABASE_URL: present("SUPABASE_URL") || present("NEXT_PUBLIC_SUPABASE_URL"),
     SUPABASE_PUBLISHABLE_KEY: present("SUPABASE_PUBLISHABLE_KEY") || present("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"),
@@ -48,6 +65,21 @@ export async function GET(): Promise<Response> {
     }
   }
 
+  const ok = Object.values(env).every(Boolean) && db.reachable && db.tables_present;
+  const time = new Date().toISOString();
+
+  let detailed = hasCronSecret(request);
+  if (!detailed) {
+    try {
+      detailed = Boolean(await getCurrentUser());
+    } catch {
+      detailed = false;
+    }
+  }
+  if (!detailed) {
+    return Response.json({ ok, time }, { status: 200, headers });
+  }
+
   const mode = getAiMode();
   const ai = {
     mode,
@@ -55,10 +87,5 @@ export async function GET(): Promise<Response> {
     check_model: MODELS.check,
     check_model_overridden: Boolean(process.env.AI_CHECK_MODEL?.trim()),
   };
-
-  const ok = Object.values(env).every(Boolean) && db.reachable && db.tables_present;
-  return Response.json(
-    { ok, env, db, ai, time: new Date().toISOString() },
-    { status: 200, headers: { "cache-control": "no-store" } },
-  );
+  return Response.json({ ok, env, db, ai, time }, { status: 200, headers });
 }

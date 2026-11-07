@@ -21,7 +21,18 @@ const MAX_QUESTION_CHARS = 1_000;
 
 export type AskResult = { ok: true; answer: string } | { ok: false; error: string };
 
-const ACTION_RE = /\b(approve|reject|dismiss|pass|clear|sign off|mark (it |this )?(as )?(compliant|approved|ok|safe)|change (the |a )?rule|edit (the |a )?rule|disable (the |a )?rule|delete|re-?run|request changes)\b/i;
+/**
+ * A request for an action (as opposed to a question about one): the verb
+ * starts the message or follows "please", "can you", "go ahead and", etc.
+ * "Does this pass the rule?" is a question and goes to the model; "Approve
+ * this ad" and "Can you mark it compliant?" get the canned refusal.
+ */
+const ACTION_VERBS =
+  "approve|reject|dismiss|clear|sign off( on)?|pass|accept|mark (it |this |the ad |this ad )?(as )?(compliant|approved|ok|okay|safe|passing)|change (the |a |this )?rules?|edit (the |a |this )?rules?|disable (the |a |this )?rules?|turn off (the |a |this )?rules?|delete|remove (the |this |an? )?(issue|finding|rule|ad)|re-?run|re-?check|request changes|withdraw|override";
+const ACTION_RE = new RegExp(
+  `(^|[.!?]\\s+|\\b(please|pls|just|now|go ahead and|can you|could you|would you|will you|you (should|must|need to|have to)|i (want|need|would like) you to)\\s+)(${ACTION_VERBS})\\b`,
+  "i",
+);
 
 function stripMarkdown(s: string): string {
   return s
@@ -32,7 +43,10 @@ function stripMarkdown(s: string): string {
     .replace(/__([^_]+)__/g, "$1")
     .replace(/^\s*[-*•]\s+/gm, "")
     .replace(/`([^`]+)`/g, "$1")
-    .replace(/https?:\/\/\S+/g, "")
+    .replace(/\bhttps?:\/\/\S+/gi, "")
+    .replace(/\bwww\.[^\s)]+/gi, "")
+    .replace(/\b(mailto|javascript|data):[^\s)]+/gi, "")
+    .replace(/<\/?[a-z][^>]*>/gi, "") // stray HTML tags
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
@@ -111,7 +125,7 @@ export async function askAboutAd(input: { profileId: string; userId: string; ass
   const openIssues = issueList.filter((i) => i.status === "open");
 
   // Requests for actions are answered without spending budget.
-  if (ACTION_RE.test(question) && /\b(this|the|it|ad|rule|issue)\b/i.test(question)) {
+  if (ACTION_RE.test(question) && /\b(this|the|it|them|ad|rule|issue|finding|everything|all)\b/i.test(question)) {
     const list = openIssues.length
       ? openIssues.map((i, n) => `${n + 1}. ${i.title} (${i.severity})${i.quote ? `: "${i.quote}"` : ""}`).join("\n")
       : "There are no open issues on this version.";

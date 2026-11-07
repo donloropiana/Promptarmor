@@ -49,7 +49,7 @@ export function HiddenTextAlert({ alerts, issueCount }: { alerts: AdAlert[]; iss
                     </span>
                   )}
                 </div>
-                <blockquote className="whitespace-pre-wrap break-words font-mono text-xs text-foreground" aria-label="Hidden text, shown as inert quoted content">
+                <blockquote className="max-h-40 overflow-y-auto whitespace-pre-wrap font-mono text-xs text-foreground [overflow-wrap:anywhere]" aria-label="Hidden text, shown as inert quoted content" dir="auto">
                   {a.excerpt?.trim() || "(empty)"}
                 </blockquote>
               </li>
@@ -93,7 +93,7 @@ function AcknowledgeButton({ alertId, count }: { alertId: string; count: number 
         })
       }
     >
-      {pending ? <Spinner /> : <ShieldCheck data-icon="inline-start" />}
+      {pending ? <Spinner className="motion-reduce:animate-none" /> : <ShieldCheck data-icon="inline-start" />}
       {count > 1 ? "Acknowledge this one" : "I have read this. Acknowledge"}
     </Button>
   );

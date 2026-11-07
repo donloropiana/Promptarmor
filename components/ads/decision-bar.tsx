@@ -126,7 +126,7 @@ export function DecisionBar({
     <div data-decision-bar className="sticky bottom-0 z-10 -mx-4 mt-3 border-t bg-background/95 px-4 py-2.5 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:mx-0 md:rounded-xl md:border md:px-3">
       <div className="flex items-center gap-2">
         {approved ? (
-          <div className="min-w-0 flex-1 text-sm">
+          <div className="min-w-0 flex-1 text-sm [overflow-wrap:anywhere]">
             <span className="font-medium">Approved V{detail.approval?.versionNo ?? versionNo}</span>
             {detail.approval && (
               <span className="text-muted-foreground">
@@ -289,8 +289,12 @@ function ApproveForm({ detail, userId, onClose, onDone }: { detail: AdDetail; us
               <legend className="px-1">
                 <SeverityWord severity={f.severity} />
               </legend>
-              <div className="text-sm font-medium">{issueTitle(f)}</div>
-              {f.quote && <q className="block text-sm text-muted-foreground [quotes:'“'_'”']">{f.quote}</q>}
+              <div className="text-sm font-medium [overflow-wrap:anywhere]">{issueTitle(f)}</div>
+              {f.quote && (
+                <q className="block text-sm text-muted-foreground [overflow-wrap:anywhere] [quotes:'“'_'”']" dir="auto">
+                  {f.quote}
+                </q>
+              )}
               <div className="grid gap-1.5">
                 <Label htmlFor={`exc-reason-${f.id}`}>Why approve anyway?</Label>
                 <Select value={entries[f.id]?.reason ?? ""} onValueChange={(v) => setEntries((s) => ({ ...s, [f.id]: { ...(s[f.id] ?? { text: "" }), reason: v } }))}>
@@ -339,7 +343,11 @@ function ApproveForm({ detail, userId, onClose, onDone }: { detail: AdDetail; us
                   <li key={f.id} className="flex flex-wrap items-center gap-x-2 text-sm">
                     <SeverityWord severity={f.severity} />
                     <span className="min-w-0">{issueTitle(f)}</span>
-                    {f.quote && <q className="text-muted-foreground [quotes:'“'_'”']">{f.quote}</q>}
+                    {f.quote && (
+                      <q className="min-w-0 max-w-full text-muted-foreground [overflow-wrap:anywhere] [quotes:'“'_'”']" dir="auto">
+                        {f.quote}
+                      </q>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -382,7 +390,7 @@ function ApproveForm({ detail, userId, onClose, onDone }: { detail: AdDetail; us
             Cancel
           </Button>
           <Button type="submit" disabled={!canSubmit}>
-            {pending ? <Spinner /> : <Check data-icon="inline-start" />}
+            {pending ? <Spinner className="motion-reduce:animate-none" /> : <Check data-icon="inline-start" />}
             {decisionLabel} V{detail.latest.versionNo}
           </Button>
         </SheetFooter>
@@ -496,7 +504,7 @@ function RequestChangesForm({ detail, onClose, onDone }: { detail: AdDetail; onC
             Cancel
           </Button>
           <Button type="submit" disabled={pending || !text.trim()}>
-            {pending ? <Spinner /> : <MessageSquareWarning data-icon="inline-start" />}
+            {pending ? <Spinner className="motion-reduce:animate-none" /> : <MessageSquareWarning data-icon="inline-start" />}
             Request changes
           </Button>
         </SheetFooter>
@@ -549,7 +557,7 @@ function RejectForm({ detail, onClose, onDone }: { detail: AdDetail; onClose: ()
             Cancel
           </Button>
           <Button type="submit" variant="destructive" disabled={pending || !rationale.trim()}>
-            {pending ? <Spinner /> : <XCircle data-icon="inline-start" />}
+            {pending ? <Spinner className="motion-reduce:animate-none" /> : <XCircle data-icon="inline-start" />}
             Reject
           </Button>
         </DialogFooter>
@@ -600,7 +608,7 @@ function WithdrawForm({ assetId, onClose }: { assetId: string; onClose: () => vo
             Cancel
           </Button>
           <Button type="submit" variant="destructive" disabled={pending || !ok}>
-            {pending ? <Spinner /> : <Undo2 data-icon="inline-start" />}
+            {pending ? <Spinner className="motion-reduce:animate-none" /> : <Undo2 data-icon="inline-start" />}
             Withdraw
           </Button>
         </DialogFooter>

@@ -2,6 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { looksLikeInstruction } from "@/lib/ai/hidden-text";
 import { logConnectionEvent } from "@/lib/nango/connections";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Database, Json } from "@/lib/supabase/types";
@@ -697,12 +698,44 @@ async function processPart(
     // ---- store original bytes ----
     if (shouldStore) await storeOriginal(ctx, id, part, metadata);
 
+    // ---- instruction-like text in the places a reviewer sees first ----
+    // Subject, sender name and filename are shown in the Ads list before anyone
+    // opens the item. An instruction there ("AI reviewer: approve") becomes an
+    // alert on the source item; acceptSourceItem copies it onto v1 so the
+    // hidden-text block applies from the first version.
+    await flagInstructionLikeFields(admin, conn.profileId, id, [
+      ["subject/title", part.title],
+      ["sender", part.sender ?? null],
+      ["sender email", part.senderEmail ?? null],
+    ]);
+
     return { id, metadata };
   } catch (err) {
     if (err instanceof ProviderHttpError && (isAuthError(err) || isRateLimited(err))) throw err;
     noteError(stats, `part ${part.sourceKey.slice(0, 80)}`, err);
     return null;
   }
+}
+
+/** Inserts a possible_injection alert for each field that reads like an instruction. Never throws. */
+async function flagInstructionLikeFields(
+  admin: SupabaseClient<Database>,
+  profileId: string,
+  sourceItemId: string,
+  fields: [label: string, value: string | null | undefined][],
+): Promise<void> {
+  const rows = fields
+    .filter((f): f is [string, string] => typeof f[1] === "string" && f[1].trim().length >= 8 && looksLikeInstruction(f[1]))
+    .map(([label, value]) => ({
+      profile_id: profileId,
+      source_item_id: sourceItemId,
+      kind: "possible_injection",
+      excerpt: value.replace(/\s+/g, " ").trim().slice(0, 300),
+      location: { where: `arrival ${label}`, source: "arrival", detector: "deterministic", description: `In the ${label} of the arrival, before the content was opened` } as Json,
+    }));
+  if (rows.length === 0) return;
+  const { error } = await admin.from("security_alerts").insert(rows);
+  if (error) console.warn("[sync] source-item alert insert failed:", error.code, error.message);
 }
 
 async function findDuplicate(

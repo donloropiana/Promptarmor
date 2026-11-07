@@ -74,10 +74,19 @@ function invalid(error: z.ZodError): { ok: false; error: string; code: string } 
 const SIGNED_OUT = { ok: false as const, error: "Your session has expired. Sign in again.", code: "unauthenticated" };
 const NOT_FOUND = { ok: false as const, error: "Product not found.", code: "PT404" };
 
+/** The database says "profile"; people see "workspace". */
+function plain(message: string): string {
+  const text = message
+    .replace(/\bprofiles?\b/g, (w) => (w.endsWith("s") ? "workspaces" : "workspace"))
+    .replace(/\bProfiles?\b/g, (w) => (w.endsWith("s") ? "Workspaces" : "Workspace"))
+    .trim();
+  return /[.!?]$/.test(text) ? text : `${text}.`;
+}
+
 function dbFailure(where: string, error: PostgrestError): { ok: false; error: string; code?: string } {
   if (error.code === "23505") return { ok: false, error: "A product with that code already exists in this workspace.", code: error.code };
   if (error.code === "PT409" || error.code === "PT422" || error.code === "42501") {
-    return { ok: false, error: error.message, code: error.code };
+    return { ok: false, error: plain(error.message), code: error.code };
   }
   console.error(`[offers] ${where} failed:`, error.code, error.message);
   return { ok: false, error: "Something went wrong. Please try again.", code: error.code };

@@ -13,6 +13,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { uploadAd } from "@/lib/actions/ads";
+import { visibleLength } from "@/lib/intake/infer";
 
 export const ACCEPT = ".pdf,.png,.jpg,.jpeg,.webp,.html,.htm,.txt,application/pdf,image/png,image/jpeg,image/webp,text/html,text/plain";
 const MAX_BYTES = 4 * 1024 * 1024;
@@ -34,7 +35,23 @@ export function useAdUpload() {
     (fd: FormData) => {
       setError(null);
       startTransition(async () => {
-        const res = await uploadAd(fd);
+        let res: Awaited<ReturnType<typeof uploadAd>> | null = null;
+        try {
+          res = await uploadAd(fd);
+        } catch (err) {
+          // The action itself did not answer: the request was refused before
+          // it ran (a body too large for the server, a dropped connection).
+          // The redirect on success is thrown by Next and must pass through.
+          if (isNextRedirect(err)) throw err;
+          const file = fd.get("file");
+          const big = file instanceof File && file.size > 1024 * 1024;
+          res = {
+            ok: false,
+            error: big
+              ? "The upload did not go through: the server refused a file this large. Export a smaller PDF or image, or paste the text."
+              : "The upload did not go through. Check your connection and try again.",
+          };
+        }
         // On success the action redirects to the new ad; only errors come back.
         if (res && res.ok === false) {
           setError(res.error);
@@ -71,6 +88,12 @@ export function useAdUpload() {
   );
 
   return { pending, error, submitFile, submitText, clearError: () => setError(null) };
+}
+
+/** Next signals redirect() by throwing; it must not be mistaken for a failure. */
+function isNextRedirect(err: unknown): boolean {
+  const digest = (err as { digest?: unknown } | null)?.digest;
+  return typeof digest === "string" && digest.startsWith("NEXT_REDIRECT");
 }
 
 function firstFile(dt: DataTransfer | null): File | null {
@@ -131,7 +154,7 @@ export function WindowDropOverlay() {
       className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-150"
     >
       <div className="flex max-w-sm flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-foreground/40 bg-card px-8 py-10 text-center shadow-lg">
-        {pending ? <Spinner className="size-6" /> : <UploadCloud aria-hidden className="size-7 text-muted-foreground" />}
+        {pending ? <Spinner className="size-6 motion-reduce:animate-none" /> : <UploadCloud aria-hidden className="size-7 text-muted-foreground" />}
         <div className="text-base font-medium">{pending ? "Adding your ad…" : "Drop to check this ad"}</div>
         <p className="text-sm text-muted-foreground">PDF, PNG, JPG, WebP, HTML or text. Up to 4 MB.</p>
       </div>
@@ -171,7 +194,7 @@ export function ChooseFileButton({
         }}
       />
       <Button type="button" variant={variant} size={size} className={className} disabled={pending} onClick={() => ref.current?.click()}>
-        {pending ? <Spinner /> : <FileUp data-icon="inline-start" />}
+        {pending ? <Spinner className="motion-reduce:animate-none" /> : <FileUp data-icon="inline-start" />}
         {children ?? "Choose file"}
       </Button>
     </>
@@ -184,7 +207,8 @@ export function NewAdDialog({ open, onOpenChange }: { open: boolean; onOpenChang
   const [text, setText] = useState("");
   const [title, setTitle] = useState("");
   const [dragOver, setDragOver] = useState(false);
-  const tooShort = text.trim().length < 10;
+  // Same rule as the server: whitespace and invisible characters do not count.
+  const tooShort = visibleLength(text) < 10;
 
   return (
     <Dialog
@@ -253,7 +277,7 @@ export function NewAdDialog({ open, onOpenChange }: { open: boolean; onOpenChang
                 Cancel
               </Button>
               <Button type="button" onClick={() => submitText(text.trim(), title.trim() || undefined)} disabled={pending || tooShort}>
-                {pending ? <Spinner /> : <Plus data-icon="inline-start" />}
+                {pending ? <Spinner className="motion-reduce:animate-none" /> : <Plus data-icon="inline-start" />}
                 Check this ad
               </Button>
             </div>

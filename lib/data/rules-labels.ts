@@ -23,7 +23,7 @@ export const SEVERITIES: readonly Severity[] = ["critical", "major", "minor"];
 
 export const RULE_KIND_LABELS: Record<RuleKind, string> = {
   regulatory: "Law",
-  policy: "Company policy",
+  policy: "Company rule",
   offer: "Product terms",
   security: "Security",
 };

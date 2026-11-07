@@ -91,6 +91,19 @@ function invalid(error: z.ZodError): { ok: false; error: string; code: string } 
 
 const SIGNED_OUT = { ok: false as const, error: "Your session has expired. Sign in again.", code: "unauthenticated" };
 
+/**
+ * The database names the tenant a "profile"; the UI calls it a workspace.
+ * Messages the database raised for people (PTxxx / 42501) are shown as is,
+ * with that one word translated.
+ */
+function plain(message: string): string {
+  const text = message
+    .replace(/\bprofiles?\b/g, (w) => (w.endsWith("s") ? "workspaces" : "workspace"))
+    .replace(/\bProfiles?\b/g, (w) => (w.endsWith("s") ? "Workspaces" : "Workspace"))
+    .trim();
+  return /[.!?]$/.test(text) ? text : `${text}.`;
+}
+
 /** Maps tenancy RPC errors (PTxxx / 42501 / 23505 carry user-facing messages). */
 function rpcFailure(error: PostgrestError): { ok: false; error: string; code?: string; hint?: string } {
   // A raw unique-index violation (e.g. two concurrent invites to one address
@@ -100,7 +113,7 @@ function rpcFailure(error: PostgrestError): { ok: false; error: string; code?: s
   }
   const userFacing = new Set(["PT404", "PT409", "PT422", "PT429", "42501", "23505"]);
   if (error.code && userFacing.has(error.code)) {
-    return { ok: false, error: error.message, code: error.code, hint: error.hint ?? undefined };
+    return { ok: false, error: plain(error.message), code: error.code, hint: error.hint ? plain(error.hint) : undefined };
   }
   console.error("[profiles] rpc failed:", error.code, error.message);
   if (error.code === "PGRST202") {

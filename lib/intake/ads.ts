@@ -11,7 +11,7 @@ import type { AdFile, Product, SampleKey, VersionContent } from "@/lib/types/ads
 
 import { extractFromHtml, extractFromText, extractPdf, type ExtractedDocument } from "./extract";
 import { normalizedTextHash, sha256Hex } from "./hash";
-import { inferChannel, inferProduct, inferTitle } from "./infer";
+import { hasVisibleText, inferChannel, inferProduct, inferTitle } from "./infer";
 
 /**
  * Intake: turning pasted text, uploaded files, sample ads and connector
@@ -28,6 +28,38 @@ type VersionOrigin = Database["public"]["Tables"]["asset_versions"]["Insert"]["o
 
 const IMAGE_MIMES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 const TEXT_MIMES = new Set(["text/plain", "text/markdown", "text/csv"]);
+
+/** Server-side upload ceiling (the Server Action body limit in next.config.ts is the first fence). */
+export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+
+/**
+ * Abuse limits per person: how many ads (and versions) one account may
+ * create per hour, across workspaces. Generous for a review desk, small
+ * enough that a scripted loop cannot fill a workspace or burn the AI cap by
+ * itself (each version queues a check).
+ */
+export const MAX_ADS_PER_USER_PER_HOUR = 60;
+export const MAX_VERSIONS_PER_USER_PER_HOUR = 150;
+
+/**
+ * The bytes a file claims to be must match its first bytes: an HTML file
+ * renamed .png would otherwise be stored as an image and sent to the model
+ * as one. Text and HTML files are not sniffed (any bytes decode to text).
+ */
+function sniffMime(bytes: Uint8Array): "application/pdf" | "image/png" | "image/jpeg" | "image/webp" | "image/gif" | null {
+  if (bytes.length < 12) return null;
+  const b = bytes;
+  if (b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46) return "application/pdf"; // %PDF
+  if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return "image/png";
+  if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "image/jpeg";
+  if (b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x38) return "image/gif"; // GIF8
+  if (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) return "image/webp"; // RIFF....WEBP
+  return null;
+}
+
+function escapeHtmlText(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
 
 export class IntakeError extends Error {
   readonly code: string;
@@ -47,6 +79,33 @@ async function assertMember(admin: Admin, profileId: string, userId: string): Pr
     .maybeSingle();
   if (error) throw new IntakeError("Could not confirm workspace membership.", "membership_check_failed");
   if (!data) throw new IntakeError("You are not a member of this workspace.", "not_member");
+}
+
+/** Refuses when one account has created more ads or versions in the last hour than the limits allow. */
+async function assertCreateQuota(admin: Admin, userId: string, kind: "ad" | "version"): Promise<void> {
+  const since = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const query =
+    kind === "ad"
+      ? admin
+          .from("assets")
+          .select("id", { count: "exact", head: true })
+          .eq("created_by", userId)
+          .gte("created_at", since)
+          // Sample ads come from a fixed set of built-in texts ("Try a sample"), so they
+          // cannot be abused and must not lock a member out of adding real ads.
+          .or("audience.is.null,audience.neq.sample")
+      : admin.from("asset_versions").select("id", { count: "exact", head: true }).eq("author_id", userId).gte("created_at", since);
+  const { count, error } = await query;
+  if (error) return; // A counting failure must not block the desk; the budget caps still hold.
+  const limit = kind === "ad" ? MAX_ADS_PER_USER_PER_HOUR : MAX_VERSIONS_PER_USER_PER_HOUR;
+  if ((count ?? 0) >= limit) {
+    throw new IntakeError(
+      kind === "ad"
+        ? `You have added ${limit} ads in the last hour. Wait a little before adding more.`
+        : `You have added ${limit} versions in the last hour. Wait a little before adding more.`,
+      "rate_limited",
+    );
+  }
 }
 
 async function submitterFor(admin: Admin, userId: string): Promise<{ name: string | null; email: string | null }> {
@@ -74,7 +133,18 @@ async function buildFromInput(input: { text?: string; html?: string; file?: AdFi
     const mime = resolveMime(input.file.mimeType, input.file.name);
     const bytes = input.file.bytes;
     if (!bytes || bytes.byteLength === 0) throw new IntakeError("The file is empty.", "empty_file");
-    if (bytes.byteLength > 25 * 1024 * 1024) throw new IntakeError("The file is larger than 25 MB.", "too_large");
+    if (bytes.byteLength > MAX_UPLOAD_BYTES) throw new IntakeError("The file is larger than 25 MB.", "too_large");
+    if (mime === "application/pdf" || IMAGE_MIMES.has(mime)) {
+      const sniffed = sniffMime(bytes);
+      if (sniffed !== mime) {
+        throw new IntakeError(
+          sniffed
+            ? `This file is a ${sniffed === "application/pdf" ? "PDF" : sniffed.replace("image/", "").toUpperCase()} named as ${mime === "application/pdf" ? "a PDF" : "an image"} of another kind. Rename it and try again.`
+            : `This file is not a readable ${mime === "application/pdf" ? "PDF" : "image"}. Export it again and try once more.`,
+          "mime_mismatch",
+        );
+      }
+    }
     const sha = sha256Hex(bytes);
     const base: Pick<VersionContent, "filename" | "mimeType"> = { filename: input.file.name, mimeType: mime };
 
@@ -121,6 +191,7 @@ async function buildFromInput(input: { text?: string; html?: string; file?: AdFi
     }
     if (TEXT_MIMES.has(mime) || /\.(txt|md|csv)$/i.test(input.file.name)) {
       const text = bytesToText(bytes);
+      if (!hasVisibleText(text)) throw new IntakeError("That file has no readable text in it. Paste the ad text or choose another file.", "empty");
       const doc = extractFromText(text);
       return {
         content: { format: "text", ...base, text, sections: doc.sections },
@@ -150,7 +221,7 @@ async function buildFromInput(input: { text?: string; html?: string; file?: AdFi
   }
 
   const text = (input.text ?? "").replace(/\r\n?/g, "\n").trim();
-  if (!text) throw new IntakeError("Paste some ad text or choose a file first.", "empty");
+  if (!text || !hasVisibleText(text)) throw new IntakeError("There is no readable text here. Paste the ad text or choose a file.", "empty");
   const doc = extractFromText(text);
   return {
     content: { format: "text", text, sections: doc.sections },
@@ -236,6 +307,7 @@ export async function createAd(input: {
 }): Promise<{ assetId: string; versionId: string }> {
   const admin = requireSupabaseAdminClient();
   await assertMember(admin, input.profileId, input.userId);
+  await assertCreateQuota(admin, input.userId, "ad");
 
   const built = await buildFromInput({ text: input.text, html: input.html, file: input.file });
   const textForInference = built.extractedText || built.content.text || "";
@@ -291,6 +363,7 @@ export async function addVersion(input: {
   const { data: asset, error } = await admin.from("assets").select("id, profile_id, product, channel").eq("id", input.assetId).maybeSingle();
   if (error || !asset) throw new IntakeError("This ad could not be found.", "not_found");
   await assertMember(admin, asset.profile_id, input.userId);
+  await assertCreateQuota(admin, input.userId, "version");
 
   const built = await buildFromInput({ text: input.text, html: input.html, file: input.file });
   const authorId = input.origin === "email" ? null : input.userId;
@@ -389,7 +462,10 @@ async function applySuggestions(admin: Admin, versionId: string, source: string,
   let applied = 0;
   for (const f of findings ?? []) {
     if (!f.quote || !f.suggested_copy || !out.includes(f.quote)) continue;
-    out = out.replace(f.quote, f.suggested_copy);
+    // Model-written copy goes in as text: escaped for HTML, and through a
+    // function so "$&" / "$'" in the wording are never replacement patterns.
+    const replacement = kind === "html" ? escapeHtmlText(f.suggested_copy) : f.suggested_copy;
+    out = out.replace(f.quote, () => replacement);
     applied++;
   }
   if (applied === 0) {

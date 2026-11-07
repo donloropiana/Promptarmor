@@ -132,9 +132,11 @@
   }
 }
 /* Respect the OS "reduce motion" setting: enter/exit animations and
-   transitions finish at once (spinners keep turning so loading still reads). */
+   transitions finish at once. Spinners stop too (components/ui/spinner.tsx
+   adds motion-reduce:animate-none); a spinner sits beside a word such as
+   "Checking…" or in a disabled button, so loading still reads without motion. */
 @media (prefers-reduced-motion: reduce) {
-  *:not([data-slot="spinner"]),
+  *,
   ::before,
   ::after {
     animation-duration: 0.01ms !important;

@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { after } from "next/server";
 
 import {
+  LIST_CAP,
   APPROVED_STATUSES,
   NEEDS_REVIEW_STATUSES,
   SEVERITY_ORDER,
@@ -58,6 +59,8 @@ export type AdListRow = {
   openMinor: number;
   hiddenText: boolean;
   topIssue: { quote: string | null; explanation: string | null } | null;
+  /** A PDF or image from which no text could be read (and no model read it either). */
+  noText: boolean;
   from: FromInfo;
   thumbnail: { kind: "image"; url: string } | { kind: "icon"; icon: ThumbIcon };
   versionNo: number;
@@ -65,6 +68,8 @@ export type AdListRow = {
   approvedBy: string | null;
   approvedAt: string | null;
   withExceptions: boolean;
+  /** Exceptions recorded on the standing approval (0 when none or not approved). */
+  exceptionCount: number;
   submittedAt: string;
   updatedAt: string;
   isSample: boolean;
@@ -103,6 +108,8 @@ export type AdsListData = {
   counts: Record<Tab, number>;
   anyChecking: boolean;
   totalAds: number;
+  /** True when the workspace has more ads than LIST_CAP; the oldest are left out. */
+  truncated: boolean;
   triage: TriageRow[];
   skipped: SkippedRow[];
   /** Server time when the list was read; the UI uses it for relative ages. */
@@ -226,18 +233,21 @@ export async function listAdsWith(db: Db, profileId: string, userId: string): Pr
     counts: { needs_review: 0, changes_requested: 0, approved: 0, all: 0 },
     anyChecking: false,
     totalAds: 0,
+    truncated: false,
     triage: [],
     skipped: [],
     now: Date.now(),
   };
 
   const [queueRes, assetsRes, triageRes, skippedRes] = await Promise.all([
-    db.from("asset_queue").select("*").eq("profile_id", profileId).eq("is_draft", false).limit(500),
+    // Newest first so the cap, when hit, drops the oldest ads, not random ones.
+    db.from("asset_queue").select("*").eq("profile_id", profileId).eq("is_draft", false).order("submitted_at", { ascending: false, nullsFirst: false }).limit(LIST_CAP),
     db
       .from("assets")
       .select("id, audience, submitter_email, submitter_name, created_by, latest_version_id, approved_decision_id")
       .eq("profile_id", profileId)
-      .limit(500),
+      .order("submitted_at", { ascending: false, nullsFirst: false })
+      .limit(LIST_CAP),
     db
       .from("source_items")
       .select(
@@ -268,10 +278,17 @@ export async function listAdsWith(db: Db, profileId: string, userId: string): Pr
   const latestVersionIds = visibleQueue.map((q) => q.latest_version_id!).filter(Boolean);
   const assetIds = visibleQueue.map((q) => q.asset_id!);
 
-  const [versionsRes, findingsRes, sourcesRes, decisionsRes] = await Promise.all([
+  type VersionLite = { id: string; asset_id: string; format: string | null; storage_path: string | null; author_id: string | null };
+  const [versionsRes, findingsRes, sourcesRes, decisionsRes, noTextRes] = await Promise.all([
+    // Only the fields the row needs: `content` can hold 60 KB of text or HTML
+    // per version and the list never shows it.
     latestVersionIds.length
-      ? db.from("asset_versions").select("id, asset_id, content, storage_path, author_id").in("id", latestVersionIds)
-      : Promise.resolve({ data: [] as { id: string; asset_id: string; content: Json; storage_path: string | null; author_id: string | null }[] }),
+      ? db
+          .from("asset_versions")
+          .select("id, asset_id, format:content->>format, storage_path, author_id")
+          .in("id", latestVersionIds)
+          .then((r) => ({ data: (r.data ?? []) as unknown as VersionLite[], error: r.error }))
+      : Promise.resolve({ data: [] as VersionLite[], error: null }),
     latestVersionIds.length
       ? db
           .from("findings")
@@ -284,13 +301,31 @@ export async function listAdsWith(db: Db, profileId: string, userId: string): Pr
     assetIds.length
       ? db
           .from("decisions")
-          .select("id, asset_id, decision, approver_id, created_at")
+          .select("id, asset_id, decision, approver_id, created_at, exceptions")
           .in("asset_id", assetIds)
           .order("created_at", { ascending: false })
-      : Promise.resolve({ data: [] as { id: string; asset_id: string; decision: string; approver_id: string; created_at: string }[] }),
+      : Promise.resolve({ data: [] as { id: string; asset_id: string; decision: string; approver_id: string; created_at: string; exceptions: Json }[] }),
+    // Files nothing could read: intake stores an empty extraction as NULL, so
+    // this is one cheap id lookup instead of loading every text.
+    latestVersionIds.length
+      ? db.from("asset_versions").select("id").in("id", latestVersionIds).is("extracted_text", null)
+      : Promise.resolve({ data: [] as { id: string }[] }),
   ]);
 
   const versions = new Map((versionsRes.data ?? []).map((v) => [v.id, v]));
+  const noTextVersionIds = new Set((noTextRes.data ?? []).map((v) => v.id));
+  // ...unless a completed check read the file as an image (the model transcribed it).
+  const transcribedVersionIds = new Set<string>();
+  if (noTextVersionIds.size) {
+    const { data } = await db
+      .from("analysis_runs")
+      .select("asset_version_id, transcribed:input_metadata->>transcribed")
+      .in("asset_version_id", [...noTextVersionIds])
+      .eq("status", "complete");
+    for (const r of (data ?? []) as unknown as { asset_version_id: string; transcribed: string | null }[]) {
+      if (r.transcribed === "true") transcribedVersionIds.add(r.asset_version_id);
+    }
+  }
 
   // Latest dispositions for the findings we loaded, to find the top OPEN issue (with its quote).
   type FindingLite = {
@@ -373,7 +408,7 @@ export async function listAdsWith(db: Db, profileId: string, userId: string): Pr
     }
   }
 
-  const decisionsByAsset = new Map<string, { id: string; decision: string; approver_id: string; created_at: string }[]>();
+  const decisionsByAsset = new Map<string, { id: string; decision: string; approver_id: string; created_at: string; exceptions: Json }[]>();
   for (const d of decisionsRes.data ?? []) {
     const list = decisionsByAsset.get(d.asset_id) ?? [];
     list.push(d);
@@ -390,8 +425,7 @@ export async function listAdsWith(db: Db, profileId: string, userId: string): Pr
   // Thumbnails: sign image paths in one call.
   const imagePaths: string[] = [];
   for (const v of versions.values()) {
-    const c = contentOf(v.content);
-    if (c.format === "image" && v.storage_path) imagePaths.push(v.storage_path);
+    if (v.format === "image" && v.storage_path) imagePaths.push(v.storage_path);
   }
   const signed = await signUrls(db, imagePaths);
 
@@ -399,7 +433,7 @@ export async function listAdsWith(db: Db, profileId: string, userId: string): Pr
   for (const q of visibleQueue) {
     const meta = assetMeta.get(q.asset_id!);
     const version = versions.get(q.latest_version_id!);
-    const content = contentOf(version?.content);
+    const content = contentOf(version ? { format: version.format } : null);
     const status = q.status ?? "needs_review";
     const isSample = meta?.audience === "sample";
     const hiddenText = (q.open_alert_count ?? 0) > 0;
@@ -486,6 +520,7 @@ export async function listAdsWith(db: Db, profileId: string, userId: string): Pr
       openMinor,
       hiddenText,
       topIssue: top ? { quote: top.quote, explanation: top.explanation } : q.top_issue ? { quote: null, explanation: q.top_issue } : null,
+      noText: (content.format === "pdf" || content.format === "image") && noTextVersionIds.has(q.latest_version_id!) && !transcribedVersionIds.has(q.latest_version_id!),
       from,
       thumbnail,
       versionNo: q.latest_version_no ?? 1,
@@ -493,6 +528,7 @@ export async function listAdsWith(db: Db, profileId: string, userId: string): Pr
       approvedBy: approval ? (users.get(approval.approver_id)?.full_name?.trim() || users.get(approval.approver_id)?.email || null) : null,
       approvedAt: approval?.created_at ?? null,
       withExceptions: status === "approved_with_exceptions",
+      exceptionCount: Array.isArray(approval?.exceptions) ? approval.exceptions.length : 0,
       submittedAt,
       updatedAt: q.updated_at ?? submittedAt,
       isSample,
@@ -547,6 +583,7 @@ export async function listAdsWith(db: Db, profileId: string, userId: string): Pr
     counts,
     anyChecking: rows.some((r) => r.checking),
     totalAds: rows.length,
+    truncated: (queueRes.data?.length ?? 0) >= LIST_CAP,
     triage,
     skipped,
     now: Date.now(),
@@ -758,6 +795,8 @@ export type AdRun = {
    * a real model call. Null when the run did not get that far.
    */
   mode: CheckMode | null;
+  /** The model read the file as an image (no text layer). */
+  transcribed: boolean;
 };
 
 export type CheckMode = "off" | "replay" | "reused" | "live";
@@ -1074,6 +1113,7 @@ export async function getAdDetailWith(db: Db, assetId: string, profileId: string
     completedAt: r.completed_at,
     reusedFromRunId: r.reused_from_run_id,
     mode: checkModeOf(r),
+    transcribed: Boolean(r.input_metadata && typeof r.input_metadata === "object" && !Array.isArray(r.input_metadata) && (r.input_metadata as Record<string, unknown>).transcribed === true),
   }));
   const latestRun = runs.filter((r) => r.versionId === latest.id).at(-1) ?? null;
   const aiScreened = runs.some((r) => r.versionId === latest.id && r.status === "complete");

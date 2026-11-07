@@ -9,6 +9,9 @@ import type { Product, Severity } from "@/lib/types/ads";
 
 export type Tab = "needs_review" | "changes_requested" | "approved" | "all";
 
+/** Most ads one list read loads (newest first); the list says so when the cap is hit. */
+export const LIST_CAP = 500;
+
 export const TABS: { key: Tab; label: string }[] = [
   { key: "needs_review", label: "Needs review" },
   { key: "changes_requested", label: "Changes requested" },
@@ -182,7 +185,7 @@ export function shortSha(sha: string | null | undefined): string {
 }
 
 export function pluralise(n: number, one: string, many = `${one}s`): string {
-  return `${n} ${n === 1 ? one : many}`;
+  return `${n.toLocaleString("en-US")} ${n === 1 ? one : many}`;
 }
 
 /** Display name for a user row: name, else email, else a neutral fallback. */
