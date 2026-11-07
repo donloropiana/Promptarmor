@@ -188,8 +188,8 @@ export function ExportAuditButton({ settings }: { settings: WorkspaceSettings })
             <DialogTitle>Audit record · {settings.name}</DialogTitle>
             <DialogDescription>
               {record
-                ? `${record.decisions.length} ${record.decisions.length === 1 ? "decision" : "decisions"} and ${record.events.length} events, as JSON. Copy it into your records; nothing is downloaded.`
-                : "Every decision and every event in this workspace, as JSON."}
+                ? `${record.decisions.length} ${record.decisions.length === 1 ? "decision" : "decisions"}, ${record.events.length} events and ${record.ads.length} ${record.ads.length === 1 ? "ad" : "ads"} (with live, end and archive dates), as JSON. Copy it into your records; nothing is downloaded.`
+                : "Every decision, every event and every ad's status in this workspace, as JSON."}
             </DialogDescription>
           </DialogHeader>
           <div className="min-h-0 flex-1 overflow-hidden rounded-md border bg-muted/30">

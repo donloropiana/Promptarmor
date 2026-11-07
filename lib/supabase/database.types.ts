@@ -319,6 +319,8 @@ export type Database = {
       assets: {
         Row: {
           approval_expires_at: string | null
+          archive_reason: string | null
+          archived_at: string | null
           approved_decision_id: string | null
           approved_version_id: string | null
           assignee_id: string | null
@@ -329,8 +331,12 @@ export type Database = {
           created_at: string
           created_by: string | null
           due_date: string | null
+          expires_at: string | null
           id: string
           in_market_from: string | null
+          live_at: string | null
+          live_channel: string | null
+          live_url: string | null
           in_market_to: string | null
           is_draft: boolean | null
           latest_version_id: string | null
@@ -349,6 +355,8 @@ export type Database = {
         }
         Insert: {
           approval_expires_at?: string | null
+          archive_reason?: string | null
+          archived_at?: string | null
           approved_decision_id?: string | null
           approved_version_id?: string | null
           assignee_id?: string | null
@@ -359,8 +367,12 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           due_date?: string | null
+          expires_at?: string | null
           id?: string
           in_market_from?: string | null
+          live_at?: string | null
+          live_channel?: string | null
+          live_url?: string | null
           in_market_to?: string | null
           is_draft?: never
           latest_version_id?: string | null
@@ -379,6 +391,8 @@ export type Database = {
         }
         Update: {
           approval_expires_at?: string | null
+          archive_reason?: string | null
+          archived_at?: string | null
           approved_decision_id?: string | null
           approved_version_id?: string | null
           assignee_id?: string | null
@@ -389,8 +403,12 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           due_date?: string | null
+          expires_at?: string | null
           id?: string
           in_market_from?: string | null
+          live_at?: string | null
+          live_channel?: string | null
+          live_url?: string | null
           in_market_to?: string | null
           is_draft?: never
           latest_version_id?: string | null

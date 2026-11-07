@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 
 import { hasAdapter } from "@/lib/connectors/registry";
 import { runConnectionSync } from "@/lib/connectors/sync";
+import { expireLapsedAds } from "@/lib/data/lifecycle";
 import { revokeDisconnectedNangoConnections } from "@/lib/nango/connections";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
@@ -16,7 +17,9 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
  *      has one (nango_revoked_at null), e.g. after remove_member /
  *      leave_profile were called directly through the Data API.
  *   3. Deletes webhook_receipts older than 7 days.
- *   4. Spends the remaining time on one sync pass for the connection that has
+ *   4. Expiry: live ads whose end date passed go back to Needs review,
+ *      tagged Expired (lib/data/lifecycle.ts).
+ *   5. Spends the remaining time on one sync pass for the connection that has
  *      waited longest (unfinished backfills first: last_synced_at null).
  */
 
@@ -59,6 +62,9 @@ export async function GET(request: Request): Promise<Response> {
     .delete({ count: "exact" })
     .lt("received_at", new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString());
   summary.webhook_receipts_deleted = receiptsError ? `error ${receiptsError.code}` : (count ?? 0);
+
+  const expiry = await expireLapsedAds({ limit: 500 });
+  summary.expired = expiry.skipped ? { expired: expiry.expired, skipped: expiry.skipped } : expiry.expired;
 
   const remaining = BUDGET_MS - (Date.now() - startedAt);
   if (remaining > 20_000) {

@@ -10,6 +10,7 @@ import { AdsListSkeleton } from "@/components/ads/skeletons";
 import { DropBar, WindowDropOverlay } from "@/components/ads/uploader";
 import { getActiveProfile, requireUser } from "@/lib/auth/dal";
 import { getAdsMetrics, getAdsSummary, listAds, nudgeStaleRunsAfter } from "@/lib/data/ads";
+import { expireLapsedAds } from "@/lib/data/lifecycle";
 import { SAMPLE_ADS, SAMPLE_CHIPS } from "@/lib/seed/samples";
 
 export const metadata: Metadata = { title: "Ads · Marketing Compliance Workbench" };
@@ -33,6 +34,8 @@ async function AdsContent({ searchParams }: { searchParams: SearchParams }) {
 
   const sp = await searchParams;
   const tab = parseTab(sp.tab);
+  // Live ads whose end date passed go back to Needs review before the list is read.
+  await expireLapsedAds({ profileId: profile.id }).catch((err: unknown) => console.error("[ads] expiry sweep failed:", (err as Error).message));
   const list = await listAds(profile.id, user.id);
   if (list.anyChecking) nudgeStaleRunsAfter(profile.id);
 

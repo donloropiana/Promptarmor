@@ -21,6 +21,8 @@ const EMPTY_COPY: Record<Tab, { title: string; body: string }> = {
   needs_review: { title: "Nothing needs review", body: "New ads appear here the moment they arrive or are dropped in." },
   changes_requested: { title: "No changes requested", body: "Ads you send back for fixes wait here until a revision comes in." },
   approved: { title: "Nothing approved yet", body: "Approved ads keep their exact approved version, who approved it and when." },
+  live: { title: "Nothing live", body: "Open an approved ad and use Mark as live to record where it runs and until when." },
+  archived: { title: "Nothing archived", body: "Archive finished ads from the ad page's menu. They keep their full record here." },
   all: { title: "No ads yet", body: "Drop a file above to check one." },
 };
 
@@ -65,6 +67,9 @@ export function AdsList({
   const { real, samples } = useMemo(() => {
     let list = tab === "all" ? rows : rows.filter((r) => r.tab === tab);
     if (tab === "approved") list = [...list].sort((a, b) => (b.approvedAt ?? b.updatedAt).localeCompare(a.approvedAt ?? a.updatedAt));
+    // Live: the one ending soonest first (no end date last). Archived: newest first.
+    if (tab === "live") list = [...list].sort((a, b) => (a.expiresAt ?? "9999").localeCompare(b.expiresAt ?? "9999") || (b.liveAt ?? "").localeCompare(a.liveAt ?? ""));
+    if (tab === "archived") list = [...list].sort((a, b) => (b.archivedAt ?? "").localeCompare(a.archivedAt ?? ""));
     if (tab === "changes_requested") list = [...list].sort((a, b) => a.updatedAt.localeCompare(b.updatedAt));
     return { real: list.filter((r) => !r.isSample), samples: list.filter((r) => r.isSample) };
   }, [rows, tab]);

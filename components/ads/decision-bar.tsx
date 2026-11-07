@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, Check, Copy, MailCheck, MessageSquareWarning, MoreHorizontal, Undo2, XCircle } from "lucide-react";
+import { Archive, ArchiveRestore, ArrowRight, Check, Copy, MailCheck, MessageSquareWarning, MoreHorizontal, Undo2, XCircle } from "lucide-react";
 import { cn } from "cn";
 import { useRouter } from "next/navigation";
 import { useMemo, useRef, useState, useTransition } from "react";
@@ -16,10 +16,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
-import { decide, simulateRevision, withdrawApproval, type DecideResult } from "@/lib/actions/ads";
+import { archiveAd, decide, simulateRevision, unarchiveAd, withdrawApproval, type DecideResult } from "@/lib/actions/ads";
 import type { AdDetail, AdFinding } from "@/lib/data/ads";
 
-import { APPROVED_STATUSES, severityLabel, shortSha } from "./format";
+import { APPROVED_STATUSES, ARCHIVABLE_STATUSES, formatDate, severityLabel, shortSha } from "./format";
 import { issueTitle } from "./issues-panel";
 import { SeverityWord } from "./severity";
 
@@ -30,8 +30,8 @@ const EXCEPTION_REASONS = [
   { value: "legal_reviewed", label: "Reviewed and cleared by legal" },
 ] as const;
 
-export type DecisionDialogs = { approve: boolean; request: boolean; reject: boolean; withdraw: boolean };
-export const NO_DIALOGS: DecisionDialogs = { approve: false, request: false, reject: false, withdraw: false };
+export type DecisionDialogs = { approve: boolean; request: boolean; reject: boolean; withdraw: boolean; archive: boolean };
+export const NO_DIALOGS: DecisionDialogs = { approve: false, request: false, reject: false, withdraw: false, archive: false };
 
 /** Why a decision cannot be made right now, or null. */
 export function blockingReason(detail: AdDetail): string | null {
@@ -56,9 +56,12 @@ export function DecisionBar({
 }) {
   const router = useRouter();
   const [simulating, startSimulate] = useTransition();
+  const [unarchiving, startUnarchive] = useTransition();
   const cancelAdvance = useRef(false);
 
   const approved = APPROVED_STATUSES.has(detail.status);
+  const archived = Boolean(detail.archivedAt);
+  const canArchive = !archived && ARCHIVABLE_STATUSES.has(detail.status);
   const blocked = blockingReason(detail);
   const versionNo = detail.latest.versionNo;
   const set = (patch: Partial<DecisionDialogs>) => onDialogs({ ...NO_DIALOGS, ...patch });
@@ -125,7 +128,12 @@ export function DecisionBar({
   return (
     <div data-decision-bar className="sticky bottom-0 z-10 -mx-4 mt-3 border-t bg-background/95 px-4 py-2.5 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:mx-0 md:rounded-xl md:border md:px-3">
       <div className="flex items-center gap-2">
-        {approved ? (
+        {archived ? (
+          <div className="min-w-0 flex-1 text-sm [overflow-wrap:anywhere]">
+            <span className="font-medium">Archived {formatDate(detail.archivedAt)}</span>
+            {detail.archiveReason && <span className="text-muted-foreground"> · {detail.archiveReason}</span>}
+          </div>
+        ) : approved ? (
           <div className="min-w-0 flex-1 text-sm [overflow-wrap:anywhere]">
             <span className="font-medium">Approved V{detail.approval?.versionNo ?? versionNo}</span>
             {detail.approval && (
@@ -159,14 +167,33 @@ export function DecisionBar({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              {!approved && (
+              {!approved && !archived && (
                 <DropdownMenuItem onSelect={() => set({ reject: true })} disabled={detail.checking}>
                   <XCircle /> Reject…
                 </DropdownMenuItem>
               )}
-              {approved && (
+              {approved && !archived && (
                 <DropdownMenuItem onSelect={() => set({ withdraw: true })}>
                   <Undo2 /> Withdraw approval…
+                </DropdownMenuItem>
+              )}
+              {canArchive && (
+                <DropdownMenuItem onSelect={() => set({ archive: true })}>
+                  <Archive /> Archive…
+                </DropdownMenuItem>
+              )}
+              {archived && (
+                <DropdownMenuItem
+                  disabled={unarchiving}
+                  onSelect={() =>
+                    startUnarchive(async () => {
+                      const res = await unarchiveAd(detail.id);
+                      if (!res.ok) toast.error(res.error);
+                      else toast.success("Back from the archive");
+                    })
+                  }
+                >
+                  <ArchiveRestore /> Unarchive
                 </DropdownMenuItem>
               )}
               <DropdownMenuSeparator />
@@ -202,6 +229,9 @@ export function DecisionBar({
       </Dialog>
       <Dialog open={dialogs.withdraw} onOpenChange={(o) => set({ withdraw: o })}>
         <DialogContent>{dialogs.withdraw && <WithdrawForm assetId={detail.id} onClose={() => set({})} />}</DialogContent>
+      </Dialog>
+      <Dialog open={dialogs.archive} onOpenChange={(o) => set({ archive: o })}>
+        <DialogContent>{dialogs.archive && <ArchiveForm detail={detail} onClose={() => set({})} />}</DialogContent>
       </Dialog>
     </div>
   );
@@ -610,6 +640,61 @@ function WithdrawForm({ assetId, onClose }: { assetId: string; onClose: () => vo
           <Button type="submit" variant="destructive" disabled={pending || !ok}>
             {pending ? <Spinner className="motion-reduce:animate-none" /> : <Undo2 data-icon="inline-start" />}
             Withdraw
+          </Button>
+        </DialogFooter>
+      </form>
+    </>
+  );
+}
+
+function ArchiveForm({ detail, onClose }: { detail: AdDetail; onClose: () => void }) {
+  const [pending, start] = useTransition();
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const ok = reason.trim().length >= 3;
+  const approved = APPROVED_STATUSES.has(detail.status);
+  return (
+    <>
+      <DialogHeader>
+        <DialogTitle>Archive this ad</DialogTitle>
+        <DialogDescription>
+          {approved
+            ? "Moves it off the Approved and Live tabs. The approval record and every version stay; Unarchive brings it back."
+            : "Moves it to the Archived tab. Nothing is deleted; Unarchive brings it back."}
+        </DialogDescription>
+      </DialogHeader>
+      <form
+        className="space-y-3"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!ok) return;
+          start(async () => {
+            const res = await archiveAd({ assetId: detail.id, reason: reason.trim() });
+            if (!res.ok) {
+              setError(res.error);
+              return;
+            }
+            onClose();
+            toast.success("Archived");
+          });
+        }}
+      >
+        <div className="grid gap-1.5">
+          <Label htmlFor="archive-reason">Why (a few words)</Label>
+          <Textarea id="archive-reason" value={reason} onChange={(e) => setReason(e.target.value)} className="min-h-20" placeholder="Campaign ended, superseded by V3, no longer offered…" autoFocus />
+        </div>
+        {error && (
+          <p role="alert" className="text-sm text-destructive">
+            {error}
+          </p>
+        )}
+        <DialogFooter>
+          <Button type="button" variant="ghost" onClick={onClose} disabled={pending}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={pending || !ok}>
+            {pending ? <Spinner className="motion-reduce:animate-none" /> : <Archive data-icon="inline-start" />}
+            Archive
           </Button>
         </DialogFooter>
       </form>
