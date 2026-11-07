@@ -111,7 +111,7 @@ Abuse limits sit in front of the budget: one account may create at most 60 ads a
 
 ## 9. Authentication
 
-Supabase Auth only: email link or 6-digit code, and email + password with confirmation required. There are no Google or Microsoft sign-in buttons. Invitations store only `sha256(token)`, expire after 7 days, and can be accepted only by a signed-in user whose verified email matches; a mismatch returns `42501` with a masked hint. An unconfirmed password account that someone else created with the invitee's address is deleted before an invite or email-code sign-in reuses it (`find_unconfirmed_password_user`). Session cookies are handled by `@supabase/ssr` in `proxy.ts` and the server client (`SameSite=Lax`, `Secure` on https, not `httpOnly`: see §10).
+Supabase Auth only: email link or 6-digit code, and email + password with confirmation required. There are no Google or Microsoft sign-in buttons. Invitations store only `sha256(token)`, expire after 7 days, and can be accepted only by a signed-in user whose verified email matches; a mismatch returns `42501` with a masked hint. An unconfirmed password account that someone else created with the invitee's address is deleted before an invite or email-code sign-in reuses it (`find_unconfirmed_password_user`). Session cookies are handled by `@supabase/ssr` in `proxy.ts` and the server client (`httpOnly`, `SameSite=Lax`, `Secure` on https; `lib/supabase/cookie-options.ts`). There is no browser Supabase client: every write goes through a Server Action or a same-origin Route Handler, so page scripts can never read the session.
 
 `next` parameters are validated by `safeNextPath` (`lib/auth/redirect.ts`): absolute URLs are reduced to their path, `//`, `/\`, control characters and anything under `/auth/` fall back to `/`, and the check is repeated after URL normalisation. The proxy's `?code=` redirect sets `next` from the request path only. Sign-out and the connection routes refuse cross-origin and origin-less POSTs (`isSameOrigin`).
 
@@ -119,7 +119,6 @@ Supabase Auth only: email link or 6-digit code, and email + password with confir
 
 - The managed Nango OAuth apps request broader scopes than the code uses; the enforcement is in our proxy, not in the grant.
 - There is no rate limit on sign-in beyond Supabase Auth's own.
-- The session cookie is readable by page scripts (`@supabase/ssr` default), because `components/ads/review-session.tsx` writes the reviewer's active time from the browser. Nothing renders HTML from data, so the exposure is React's escaping; moving that write into a Server Action would allow `httpOnly`.
 - The preview iframe loads nothing from the network, so hosted images in HTML creative show as blanks in the Preview; the Text view has every word, and the footer says so.
 - There is no page-level `default-src` CSP (Next's inline scripts would need nonces); the response headers cover framing, sniffing, referrers and plugins.
 - Model output is verified against the text and the schema, but a model that misses a problem is simply a miss; the deterministic checks cover the numeric and hidden-text classes, not judgment calls.

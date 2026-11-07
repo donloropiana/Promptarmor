@@ -1,6 +1,6 @@
 # Progress log
 
-Active run: 2026-11-07T04:55Z (local session on Max's laptop; it refreshes this line with every push. Cloud runs: skip while it is less than 50 minutes old)
+Active run: 2026-11-07T05:00Z (local session on Max's laptop; it refreshes this line with every push. Cloud runs: skip while it is less than 50 minutes old)
 
 Read `docs/HANDOFF.md` first. Newest entries at the bottom. Keep entries short and factual.
 
@@ -33,5 +33,5 @@ Read `docs/HANDOFF.md` first. Newest entries at the bottom. Keep entries short a
 - Spec audit (docs/spec-audit.md): Cmd+B sidebar trap fixed (Show sidebar), database "profile" wording translated to "workspace", self-demotion confirm, invite expiry in APP_TIME_ZONE, Nango named honestly, "Company rule" replaces the last "policy" in UI.
 - Security review (docs/security-review.md): hidden-text scanner rewritten (nested wrappers, 86 known-answer tests in scripts/test-hidden-text.ts), ad text never outside <ad_content> (PROMPT_VERSION check-v1.4), security headers, /api/health detail only when signed in or with the cron bearer, upload bytes sniffed, PDF page cap 60, 1-4 MB uploads fixed (serverActions.bodySizeLimit), per-member hourly creation limit (sample ads excluded), friendly run errors, arrival subject/sender/filename scanned for instructions.
 - Verified locally (AI_MODE off, ai_usage unchanged at 16 rows): tsc, lint, build; test-hidden-text 86/86, smoke 44/44, verify-shell 177/177, verify-ads 68/68 + stress 152/152. ClearPath cleaned (0 visible test ads).
-- Open (low): session cookie not httpOnly (review-session.tsx uses the browser client); PL-1/AFFILIATE-DISCLOSE histories carry verification versions (immutable) -> consider a fresh demo workspace.
+- Session cookie now httpOnly (review timer moved to /api/review-session; browser Supabase client deleted). PL-1/AFFILIATE-DISCLOSE histories carry verification versions (immutable) -> consider a fresh demo workspace.
 

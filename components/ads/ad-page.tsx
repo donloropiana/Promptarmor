@@ -274,7 +274,7 @@ export function AdPage({ detail, userId }: { detail: AdDetail; userId: string })
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <AutoRefresh active={detail.checking} />
-      <ReviewSession profileId={detail.profileId} userId={userId} versionId={detail.latest.id} />
+      <ReviewSession profileId={detail.profileId} versionId={detail.latest.id} />
 
       <header className="mb-3 flex flex-col gap-2">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
