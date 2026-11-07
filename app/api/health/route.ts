@@ -1,13 +1,17 @@
 import { connection } from "next/server";
 
+import { MODELS } from "@/lib/ai/budget";
+import { getAiMode } from "@/lib/ai/mode";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 /**
  * GET /api/health
  *
- * Deployment smoke check. Returns booleans only, never values: which env
- * vars are present, whether the database answers with the service role, and
- * whether the core tables exist. Safe to leave public.
+ * Deployment smoke check. Returns booleans only for secrets (never values):
+ * which env vars are present, whether the database answers with the service
+ * role, and whether the core tables exist. The AI block says which mode the
+ * server runs in (live | off | replay, docs/ai-policy.md) and which check
+ * model it would use; neither is a secret. Safe to leave public.
  */
 
 const CORE_TABLES = ["profiles", "profile_members", "assets", "asset_versions", "analysis_runs", "findings", "rules", "offers"] as const;
@@ -44,9 +48,17 @@ export async function GET(): Promise<Response> {
     }
   }
 
+  const mode = getAiMode();
+  const ai = {
+    mode,
+    model_calls: mode === "live",
+    check_model: MODELS.check,
+    check_model_overridden: Boolean(process.env.AI_CHECK_MODEL?.trim()),
+  };
+
   const ok = Object.values(env).every(Boolean) && db.reachable && db.tables_present;
   return Response.json(
-    { ok, env, db, time: new Date().toISOString() },
+    { ok, env, db, ai, time: new Date().toISOString() },
     { status: 200, headers: { "cache-control": "no-store" } },
   );
 }

@@ -592,9 +592,21 @@ export async function askAboutAd(input: { assetVersionId: string; question: stri
   if (!version) return NOT_FOUND;
   try {
     const result = await askAboutAdEngine({ profileId: version.profile_id, userId: user.id, assetVersionId: version.id, question: parsed.data.question });
-    if (!result.ok) return { ok: false, error: result.error, code: "ask_failed" };
+    if (!result.ok) return { ok: false, error: plainAskError(result.error), code: "ask_failed" };
     return { ok: true, data: { answer: result.answer } };
   } catch (err) {
-    return fail(err, "The assistant is not available right now. Try again in a moment.");
+    return fail(err, "Ask isn't available right now. Try again in a moment.");
   }
+}
+
+/** One plain-English shape for every "no answer" case: what happened, then what to do. */
+function plainAskError(raw: string): string {
+  const detail = raw.replace(/^Ask about this ad is not available( right now)?:\s*/i, "").trim();
+  if (/ask a question first/i.test(detail)) return detail;
+  if (/budget/i.test(detail)) return "Ask isn't available right now: today's AI budget for this workspace is used up. The issues above still stand; try again tomorrow.";
+  if (/not configured|gateway|verification|credit|payment|billing|api key|unauthori[sz]ed|forbidden/i.test(detail)) {
+    return "Ask isn't available right now: the AI service is not accepting requests for this workspace. The issues above still stand; a person can still decide.";
+  }
+  if (/different way|no answer/i.test(detail)) return "No answer came back. Try asking in a different way.";
+  return `Ask isn't available right now. ${detail.replace(/\s*A person must review this ad\.?$/i, "")}`.trim();
 }

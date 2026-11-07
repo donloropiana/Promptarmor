@@ -4,8 +4,10 @@ Apply these settings manually in the Supabase dashboard for project
 `dquwmmysasjvvgxnbhdl` (https://dquwmmysasjvvgxnbhdl.supabase.co).
 The app code assumes all of them. Nothing here touches the Twilight projects.
 
-Sign-in methods: Google OAuth, email magic link plus 6-digit code, and
-email + password with required email confirmation. The only email the app
+Sign-in methods: email magic link plus 6-digit code, and email + password
+with required email confirmation. The Supabase Google provider stays
+configured (section 3) but the app shows no Google button, by decision:
+sign-in is email-only. The only email the app
 causes is Supabase Auth's own auth email (confirm, magic link/code, invite,
 reset). The app sends no other email.
 
@@ -37,8 +39,7 @@ session. `http://localhost:3000/**` is a smaller version of the same risk
   and remove it afterwards. Better: use a separate Supabase project for
   previews and local development.
 - On localhost, sign in with the 6-digit code or a password: both work
-  without a redirect URL. Google sign-in on localhost needs a separate dev
-  project.
+  without a redirect URL.
 
 ## 2. Auth → Sign In / Providers
 
@@ -54,7 +55,7 @@ session. `http://localhost:3000/**` is a smaller version of the same risk
 | Email OTP length | **6** |
 | Email OTP expiration | 3600 seconds |
 
-**Google** (enabled):
+**Google** (enabled in Supabase, unused by the app; keep it or turn it off):
 
 | Setting | Value |
 | --- | --- |
@@ -108,7 +109,7 @@ a same-origin path. It is an absolute URL, so it is URL-encoded with
 sign-in page accepts.
 
 Links always open the **Site URL** (production). When testing on localhost,
-use the 6-digit code, Google, or password sign-in instead of the link.
+use the 6-digit code or password sign-in instead of the link.
 
 ### Confirm signup
 
@@ -201,11 +202,10 @@ logs one warning and skips session refresh).
 2. Magic link: request on `/signin`, open the email, see the **Continue** page
    (nothing spent yet), click Continue, land signed in. Re-opening the same
    link shows "invalid, expired, or already used".
-3. Google: "Continue with Google" returns through `/auth/callback` signed in.
-4. Invitations: owner invites a new address → Supabase Invite email arrives →
+3. Invitations: owner invites a new address → Supabase Invite email arrives →
    Continue → `/invite/<token>` → Accept. Signed in as a different address,
    the invite page shows "Wrong account" with the masked invited email.
-5. Reset password: "Forgot password?" → email → Continue → `/reset-password`.
+4. Reset password: "Forgot password?" → email → Continue → `/reset-password`.
 
 ## 7. Nango (Google and Microsoft connections)
 

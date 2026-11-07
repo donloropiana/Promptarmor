@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { AdDecision, AdDetail, AdEvent, AdRun } from "@/lib/data/ads";
 
-import { formatDateTime, formatDuration, formatUsd, productLabel, shortSha, statusWord } from "./format";
+import { formatDuration, formatUsd, productLabel, shortSha, statusWord } from "./format";
+import { LocalDateTime, useLocalDateTime } from "./local-time";
 
 type Entry = { id: string; at: string; who: string | null; what: string; detail?: string; decision?: AdDecision; run?: AdRun };
 
@@ -27,7 +28,7 @@ function describeEvent(e: AdEvent, detail: AdDetail): { what: string; detail?: s
     }
     case "asset.status_changed": {
       const to = typeof d.to === "string" ? d.to : typeof d.new === "string" ? d.new : null;
-      return to ? { what: `Status: ${statusWord(to)}${to === "re_review_due" ? " (rates changed)" : to === "needs_manual_review" ? " (not AI-screened)" : ""}` } : null;
+      return to ? { what: `Status: ${statusWord(to)}${to === "re_review_due" ? " (rates changed)" : to === "needs_manual_review" ? " (a person must decide)" : ""}` } : null;
     }
     case "asset.metadata_updated": {
       const changed = d.changed && typeof d.changed === "object" ? (d.changed as Record<string, [unknown, unknown]>) : {};
@@ -66,7 +67,10 @@ function describeRun(r: AdRun, detail: AdDetail): { what: string; detail?: strin
   const v = detail.versions.find((x) => x.id === r.versionId)?.versionNo;
   const base = `Check on V${v ?? "?"}`;
   if (r.status === "complete") {
-    return { what: `${base} complete`, detail: `${r.reusedFromRunId ? "reused earlier result · " : ""}${r.model ?? "AI"} · ${r.inputTokens + r.outputTokens} tokens · ${formatUsd(r.costUsd, { precise: true })}` };
+    if (r.mode === "off") return { what: `${base} complete`, detail: "AI step skipped (test mode) · product-terms check only · $0" };
+    if (r.mode === "replay") return { what: `${base} complete`, detail: "recorded result replayed · no AI spend" };
+    if (r.mode === "reused") return { what: `${base} complete`, detail: "reused from an identical ad · $0" };
+    return { what: `${base} complete`, detail: `${r.model ?? "AI"} · ${(r.inputTokens + r.outputTokens).toLocaleString("en-US")} tokens · ${formatUsd(r.costUsd, { precise: true })}` };
   }
   if (r.status === "failed") return { what: `${base} failed`, detail: r.error ?? "Not AI-screened; review by hand." };
   if (r.status === "declined_budget") return { what: `${base} skipped: AI budget reached`, detail: "Not AI-screened; review by hand." };
@@ -124,9 +128,7 @@ export function History({ detail }: { detail: AdDetail }) {
         <ol className="divide-y border-t">
           {entries.map((en) => (
             <li key={en.id} className="flex gap-3 px-3.5 py-2 text-sm">
-              <time dateTime={en.at} className="w-28 shrink-0 text-xs tabular-nums text-muted-foreground" title={new Date(en.at).toLocaleString()}>
-                {formatDateTime(en.at)}
-              </time>
+              <LocalDateTime iso={en.at} className="w-24 shrink-0 text-xs tabular-nums text-muted-foreground sm:w-28" />
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-x-2">
                   <span className="font-medium">{en.what}</span>
@@ -150,13 +152,14 @@ export function History({ detail }: { detail: AdDetail }) {
 }
 
 function DecisionSnapshotDialog({ decision: d, detail, onClose }: { decision: AdDecision | null; detail: AdDetail; onClose: () => void }) {
+  const when = useLocalDateTime(d?.createdAt);
   if (!d) return null;
   const version = detail.versions.find((v) => v.id === d.versionId);
   const snap = d.snapshot;
   const rows: [string, string][] = [
     ["Decision", describeDecision(d).what],
     ["By", `${d.approverLabel}${d.selfApproved ? " (self-approval)" : ""}`],
-    ["When", formatDateTime(d.createdAt)],
+    ["When", when],
     ["Version", version ? `V${version.versionNo} · ${d.contentSha256}` : d.contentSha256],
     ["Attested", d.attested ? "Yes" : "No"],
     ["AI screened", d.manualOnly ? "No (manual approval)" : "Yes"],

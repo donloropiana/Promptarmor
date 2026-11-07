@@ -56,3 +56,23 @@ A multi-tenant review desk for marketing that has to follow the law. Lenders (pe
 - Stop starting new work after about 45 minutes; leave the repo building, update PROGRESS.md, set "Active run: none (finished <UTC timestamp>)", push.
 - Verify deployments with the Vercel MCP tools and by fetching the production URL. If a production deploy breaks the site, fix forward immediately (or revert your last commit with `git revert`).
 - Never print or commit secrets. Never use Supabase MCP tools. Never touch Twilight projects, repos or connectors.
+
+## Round 2 (local, 2026-11-07, parallel engineers A–R in one working tree)
+
+Round 1 shipped the product (see PROGRESS.md 2026-11-07T02:04Z). Round 2 ran several engineers in parallel on the same tree with strict file ownership. This section is Engineer R's (README, docs, repo hygiene) handoff; other engineers record theirs in PROGRESS.md.
+
+**Docs written or rewritten this round**
+- `README.md`: for the PromptArmor reviewers. What it is, live demo (no credentials in the repo: "ask Max for a login" or create a workspace with your own email), the 6-minute demo in a table, how it works (arrivals, the check pipeline stage by stage, decisions, Rules/Products, audit), security model, cost policy, architecture diagram, data model summary, decisions and trade-offs, honest known limitations, local setup with the exact script commands, repo map. Every claim was checked against the code at the time of writing (engine, intake, actions, routes, migrations, UI copy).
+- `docs/security.md`: the long version of the security model, each point tied to a file or migration.
+- `docs/architecture.md`: request paths, the engine stage table, recovery without a worker, arrivals, deployment and conventions.
+- `docs/demo-script.md`: tightened, plus a full variant for when the AI Gateway is not serving (deterministic findings, Not AI-screened approval with a 40-character rationale, hidden-text alert still blocking).
+- `docs/rules-rationale.md`: unchanged (already accurate).
+- `scripts/cleanup-workspace.ts`: retires test ads (`[test]` titles or `audience = 'sample'`, never approved ones) as `withdrawn` + `sample_cleared` with `--dry-run`; verified against ClearPath (dry run only).
+- `.gitignore`: appended `.smoke-screens/`, `screens-r2/`, `*.local.log`.
+
+**Things the lead should know (found while verifying the docs, not fixed because the files belong to others)**
+- The Connected accounts page says "Looks back 14 days" (`app/(app)/settings/accounts/page.tsx`, `components/settings/accounts.tsx`) but `runConnectionSync` defaulted `backfillDays` to 30 (`lib/connectors/sync.ts`). Resolved by the integrator: the default is now 14 days, matching the card and the UI spec.
+- The AI policy work (`lib/ai/mode.ts`, `AI_MODE`, Haiku default, reuse at $0, replay, prompt caching) landed during this round. `docs/ai-policy.md` and `scripts/record-fixtures.ts` landed too; the README links and lists them. `fixtures/recorded/` does not exist yet (needs one live run per sample once the gateway card is in), so `replay` behaves like `off` for now; the README says so under Known limitations.
+- The ClearPath workspace had two sample ads in `needs_manual_review` during this round (other engineers' test runs). `scripts/cleanup-workspace.ts <clearpath-id>` retires them; `--dry-run` first. Then Settings → Workspace → Clear samples is not needed (the script already sets `sample_cleared`).
+- `docs/setup.md` described Google OAuth as a sign-in method. Resolved by the integrator: it now says the Supabase provider stays configured but the app shows no Google button, by decision.
+- "Highlight text → Add issue" (reviewer findings) is still not built; the README lists it.

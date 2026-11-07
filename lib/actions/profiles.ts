@@ -46,9 +46,9 @@ const roleSchema = z.enum(["owner", "member"]).default("member");
 
 const createProfileSchema = z.object({
   name: z
-    .string({ error: "Enter a profile name." })
+    .string({ error: "Enter a workspace name." })
     .trim()
-    .min(1, { error: "Enter a profile name." })
+    .min(1, { error: "Enter a workspace name." })
     .max(80, { error: "Use at most 80 characters." }),
 });
 const inviteSchema = z.object({ profileId: id, email: emailSchema, role: roleSchema });
@@ -369,7 +369,7 @@ export async function setActiveProfile(input: Input): Promise<ActionResult<{ pro
   if (!ctx) return SIGNED_OUT;
 
   const role = await getMembershipRole(parsed.data.profileId);
-  if (!role) return { ok: false, error: "Profile not found.", code: "PT404" };
+  if (!role) return { ok: false, error: "Workspace not found.", code: "PT404" };
 
   await setActiveProfileCookie(parsed.data.profileId);
   refresh();

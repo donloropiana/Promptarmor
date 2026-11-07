@@ -89,7 +89,10 @@ export function AiCapCard({ settings }: { settings: WorkspaceSettings }) {
         <p className="text-xs text-muted-foreground tabular-nums">{settings.aiRemainingUsd !== null ? `${usd(settings.aiRemainingUsd)} left` : "—"}</p>
       </div>
       <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct ?? 0} aria-label="AI spend today">
-        <div className="h-full rounded-full bg-foreground transition-[width] duration-300 motion-reduce:transition-none" style={{ width: `${pct ?? 0}%` }} />
+        <div
+          className="h-full w-full origin-left rounded-full bg-foreground transition-transform duration-300 ease-out motion-reduce:transition-none"
+          style={{ transform: `scaleX(${(pct ?? 0) / 100})` }}
+        />
       </div>
       <p className="text-xs text-muted-foreground">
         Resets daily (UTC). When the cap is reached, new ads wait for a manual review instead of an AI check. The cap is set by the operator
@@ -211,7 +214,7 @@ export function ExportAuditButton({ settings }: { settings: WorkspaceSettings })
             <Button variant="ghost" onClick={() => setOpen(false)}>
               Close
             </Button>
-            <CopyButton text={json} label="Copy JSON" size="default" variant="default" className={record ? "" : "pointer-events-none opacity-50"} />
+            <CopyButton text={json} label="Copy JSON" size="default" variant="default" disabled={!record} />
           </DialogFooter>
         </DialogContent>
       </Dialog>

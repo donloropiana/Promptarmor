@@ -7,6 +7,11 @@ const nextConfig: NextConfig = {
   },
   cacheComponents: true,
   partialPrefetching: true,
+  // Dev only: Next prints every Server Function call with its arguments,
+  // which would put sign-in passwords and pasted ad text into terminal logs.
+  logging: {
+    serverFunctions: false,
+  },
   // Public Supabase values for browser bundles, mapped from the server-side
   // names Doppler/Vercel provide. Public values ONLY: never map
   // SUPABASE_SECRET_KEY or NANGO_SECRET_KEY here (everything in `env` is

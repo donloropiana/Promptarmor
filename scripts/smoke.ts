@@ -69,7 +69,9 @@ function record(label: string, ok: boolean, detail?: string) {
   console.log(`${ok ? "PASS" : "FAIL"}  ${label}${detail ? ` · ${detail}` : ""}`);
 }
 
-const SAMPLE_TEXT = `Crush your credit card debt with a ClearPath Personal Loan.
+// The first line becomes the ad's title: the "[test] " prefix lets the lead purge
+// smoke-test ads from a shared workspace (scripts/cleanup-workspace.ts).
+const SAMPLE_TEXT = `[test] Crush your credit card debt with a ClearPath Personal Loan.
 Rates from 5.99% APR. Guaranteed approval, no credit check.
 Borrow up to $50,000 and pay as little as $199/mo.
 Apply in two minutes at clearpath.example/apply.`;
@@ -102,7 +104,8 @@ async function visit(page: Page, route: string, label: string) {
   const res = await page.goto(`${BASE}${route}`, { waitUntil: "networkidle", timeout: 60_000 });
   const status = res?.status() ?? 0;
   record(`${label}: HTTP ${status}`, status === 200);
-  record(`${label}: content streamed in`, await settled(page), "a loading skeleton is still showing after 60 s");
+  const done = await settled(page);
+  record(`${label}: content streamed in`, done, done ? undefined : "a loading skeleton is still showing after 60 s");
   await expectNoErrorBoundary(page, label);
   return status;
 }

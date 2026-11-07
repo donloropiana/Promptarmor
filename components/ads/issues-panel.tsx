@@ -45,6 +45,7 @@ export function IssuesPanel({
   formFor,
   onFormFor,
   readOnly,
+  emptyNote,
 }: {
   findings: AdFinding[];
   assetId: string;
@@ -56,6 +57,8 @@ export function IssuesPanel({
   formFor: string | null;
   onFormFor: (id: string | null) => void;
   readOnly: boolean;
+  /** What to say when nothing was found (depends on which checks actually ran). */
+  emptyNote?: string;
 }) {
   const [showDismissed, setShowDismissed] = useState(false);
 
@@ -70,7 +73,7 @@ export function IssuesPanel({
       <div className="rounded-xl border border-dashed bg-card p-6 text-center">
         <CheckCheck aria-hidden className="mx-auto mb-2 size-5 text-muted-foreground" />
         <div className="text-sm font-medium">No issues found</div>
-        <p className="mt-1 text-sm text-muted-foreground">The check found nothing against the rules or the product terms. Read the ad yourself before approving.</p>
+        <p className="mt-1 text-sm text-muted-foreground">{emptyNote ?? "The check found nothing against the rules or the product terms. Read the ad yourself before approving."}</p>
       </div>
     );
   }
@@ -169,7 +172,7 @@ function IssueCard({
       ref={ref}
       data-finding-id={f.id}
       className={cn(
-        "rounded-xl border bg-card transition-[box-shadow,border-color]",
+        "scroll-mb-24 scroll-mt-4 rounded-xl border bg-card transition-[box-shadow,border-color] duration-150",
         selected && "border-foreground/40 ring-1 ring-foreground/20",
         f.severity === "critical" && !selected && "border-destructive/30",
       )}

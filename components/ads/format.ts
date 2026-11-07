@@ -132,21 +132,35 @@ export function relativeTime(iso: string | null | undefined, now = Date.now()): 
   return `${Math.round(d / 365)} y ago`;
 }
 
-export function formatDateTime(iso: string | null | undefined): string {
+/**
+ * "Nov 6, 8:07 PM" (with the year when it is not the current one). Built from
+ * Intl parts so every runtime (Bun on the server, each browser) prints the
+ * same text for the same zone; pass `timeZone` to pin the zone (the server
+ * renders UTC, see useLocalDateTime).
+ */
+export function formatDateTime(iso: string | null | undefined, opts: { timeZone?: string } = {}): string {
   if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString(undefined, {
+  const parts = new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
-    year: d.getFullYear() === new Date().getFullYear() ? undefined : "numeric",
+    year: "numeric",
     hour: "numeric",
     minute: "2-digit",
-  });
+    hour12: true,
+    timeZone: opts.timeZone,
+  }).formatToParts(d);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  const year = get("year");
+  const thisYear = String(new Date().getFullYear());
+  const date = `${get("month")} ${get("day")}${year && year !== thisYear ? `, ${year}` : ""}`;
+  return `${date}, ${get("hour")}:${get("minute")} ${get("dayPeriod")}`.replace(/\s+/g, " ").trim();
 }
 
 export function formatUsd(n: number | null | undefined, opts: { precise?: boolean } = {}): string {
   if (n == null || Number.isNaN(n)) return "—";
+  if (n === 0) return "$0.00";
   if (opts.precise || (n > 0 && n < 0.01)) return `$${n.toFixed(n < 0.001 ? 4 : 3)}`;
   return `$${n.toFixed(2)}`;
 }

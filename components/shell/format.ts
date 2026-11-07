@@ -19,12 +19,26 @@ export function timeAgo(iso: string | null | undefined, now: number = Date.now()
   return shortDate(iso);
 }
 
+const DATE_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/**
+ * Parses an ISO timestamp, or a date-only value ("2026-11-07", a Postgres
+ * `date`) as a calendar day in the viewer's time zone rather than UTC
+ * midnight, which would show as the previous day anywhere west of Greenwich.
+ */
+function toDate(iso: string): Date | null {
+  const m = DATE_ONLY.exec(iso);
+  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  const t = Date.parse(iso);
+  return Number.isFinite(t) ? new Date(t) : null;
+}
+
 /** "Nov 6, 2026" in the viewer's locale. */
 export function shortDate(iso: string | null | undefined): string {
   if (!iso) return "—";
-  const t = Date.parse(iso);
-  if (!Number.isFinite(t)) return "—";
-  return new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  const d = toDate(iso);
+  if (!d) return "—";
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
 /** "Nov 6, 2026, 3:04 PM". */

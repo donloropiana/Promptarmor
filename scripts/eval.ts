@@ -1,26 +1,35 @@
 /**
  * Known-answer eval for the check engine.
  *
- *   doppler run -p promptarmor -c prd -- bun --conditions=react-server scripts/eval.ts [--no-model] [--only key1,key2] [--json]
+ *   bun --conditions=react-server scripts/eval.ts --recorded [--only key1,key2] [--json]
+ *   bun --conditions=react-server scripts/eval.ts --no-model [--only ...] [--json]
+ *   AI_MODE=live doppler run -p promptarmor -c prd -- bun --conditions=react-server scripts/eval.ts [--only ...] [--json]
  *
- * Runs analyzeContent (lib/ai/analyze) over every fixtures/*.json using the
- * starter rules and ClearPath products from lib/seed, then prints per-ad
- * results and totals: recall of expected rule codes, false positives
- * (codes listed in not_expected_rule_codes), hidden-text detection and cost.
+ * Scores every fixtures/*.json against the starter rules and ClearPath
+ * products from lib/seed, then prints per-ad results and totals: recall of
+ * expected rule codes, false positives (codes listed in
+ * not_expected_rule_codes), hidden-text detection and cost.
  *
- * Needs AI_GATEWAY_API_KEY (or a Vercel OIDC token) for the model call.
- * `--no-model` runs only the deterministic checks (offer terms, hidden text)
- * and needs no key, which is useful for a quick regression pass.
+ * Three sources of findings, none of which spends unless asked:
+ *   --recorded  fixtures/recorded/<key>.json written by scripts/record-fixtures.ts
+ *               (real model output, $0 now; a sample's recorded revision is
+ *               scored too when the fixture lists revision_expected_rule_codes)
+ *   --no-model  the deterministic checks only (offer terms, hidden text)
+ *   (neither)   a live analyzeContent call per fixture; refused unless
+ *               AI_MODE=live and the gateway is configured (docs/ai-policy.md)
  *
  * Fixture shape: { key, title, product, channel, text, html?, expected_rule_codes,
- *                  not_expected_rule_codes?, hidden_text? }
+ *                  not_expected_rule_codes?, hidden_text?, revision?, revision_html?,
+ *                  revision_expected_rule_codes?, revision_not_expected_rule_codes? }
  */
 
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { analyzeContent, type AnalyzeContentResult } from "@/lib/ai/analyze";
-import { isAiGatewayConfigured } from "@/lib/ai/budget";
+import { isAiGatewayConfigured, MODELS } from "@/lib/ai/budget";
+import { getAiMode } from "@/lib/ai/mode";
+import { loadRecordings, recordedFindings, type RecordedCheck } from "@/lib/ai/recorded";
 import type { OfferInput, RuleInput } from "@/lib/ai/schema";
 import { STARTER_PRODUCTS } from "@/lib/seed/starter-products";
 import { STARTER_RULES } from "@/lib/seed/starter-rules";
@@ -31,15 +40,21 @@ type Fixture = {
   title: string;
   product: Product;
   channel?: string;
+  format?: "text" | "html";
   text: string;
   html?: string;
+  revision?: string;
+  revision_html?: string;
   expected_rule_codes: string[];
   not_expected_rule_codes?: string[];
+  revision_expected_rule_codes?: string[];
+  revision_not_expected_rule_codes?: string[];
   hidden_text?: boolean;
 };
 
 const args = process.argv.slice(2);
 const noModel = args.includes("--no-model");
+const recorded = args.includes("--recorded");
 const asJson = args.includes("--json");
 const onlyArg = args.find((a) => a.startsWith("--only"));
 const only = onlyArg ? (onlyArg.includes("=") ? onlyArg.split("=")[1] : args[args.indexOf(onlyArg) + 1]) : null;
@@ -98,14 +113,29 @@ async function main() {
     console.error("No fixtures matched.");
     process.exit(2);
   }
-  if (!noModel && !isAiGatewayConfigured()) {
+  if (!noModel && !recorded && getAiMode() !== "live") {
+    console.error(
+      [
+        `AI_MODE is "${getAiMode()}", so no model call is allowed (docs/ai-policy.md).`,
+        "Use --recorded to score the recordings in fixtures/recorded at $0, --no-model for the",
+        "deterministic checks only, or set AI_MODE=live on purpose to spend.",
+      ].join("\n"),
+    );
+    process.exit(2);
+  }
+  if (!noModel && !recorded && !isAiGatewayConfigured()) {
     console.error(
       [
         "AI_GATEWAY_API_KEY is not set, so the model cannot be called.",
-        "Add it to Doppler (doppler secrets set AI_GATEWAY_API_KEY -p promptarmor -c prd) or run with --no-model",
-        "for the deterministic checks only.",
+        "Add it to Doppler (doppler secrets set AI_GATEWAY_API_KEY -p promptarmor -c prd) or run with --recorded / --no-model.",
       ].join("\n"),
     );
+    process.exit(2);
+  }
+  const recordings = recorded ? await loadRecordings({ fresh: true }) : new Map<string, RecordedCheck>();
+  const recordingByKey = new Map(Array.from(recordings.values()).map((r) => [r.key, r]));
+  if (recorded && recordingByKey.size === 0) {
+    console.error("fixtures/recorded has no recordings yet. Record them once with AI_MODE=live ... scripts/record-fixtures.ts");
     process.exit(2);
   }
 
@@ -118,43 +148,95 @@ async function main() {
   }));
   const offers: OfferInput[] = STARTER_PRODUCTS.map((p) => ({ code: p.code, product: p.product, name: p.name, terms: p.terms }));
 
-  const rows: Row[] = [];
+  /** What to score: each fixture, plus (recorded only) a sample's revision when it has expectations. */
+  const cases: { key: string; title: string; fixture: Fixture; text: string; html?: string; expected: string[]; notExpected: string[]; recording: RecordedCheck | null }[] = [];
   for (const f of fixtures) {
+    cases.push({
+      key: f.key,
+      title: f.title,
+      fixture: f,
+      text: f.text,
+      html: f.html,
+      expected: f.expected_rule_codes,
+      notExpected: f.not_expected_rule_codes ?? [],
+      recording: recordingByKey.get(f.key) ?? null,
+    });
+    const revRecording = recordingByKey.get(`${f.key}--revision`);
+    if (recorded && revRecording && f.revision_expected_rule_codes) {
+      cases.push({
+        key: `${f.key}--revision`,
+        title: `${f.title} (revision)`,
+        fixture: f,
+        text: f.revision ?? f.text,
+        html: f.revision_html,
+        expected: f.revision_expected_rule_codes,
+        notExpected: f.revision_not_expected_rule_codes ?? [],
+        recording: revRecording,
+      });
+    }
+  }
+
+  const rows: Row[] = [];
+  const modelsSeen = new Set<string>();
+  for (const c of cases) {
+    const f = c.fixture;
     const started = Date.now();
     let result: AnalyzeContentResult | null = null;
     let error: string | undefined;
     try {
-      result = await analyzeContent({
-        text: f.text,
-        html: f.html,
-        product: f.product,
-        channel: f.channel,
-        format: f.html ? "html" : "text",
-        rules,
-        offers,
-        skipModel: noModel,
-      });
+      if (recorded) {
+        if (!c.recording) throw new Error("no recording (run scripts/record-fixtures.ts)");
+        const rec = c.recording;
+        modelsSeen.add(rec.model);
+        result = {
+          findings: recordedFindings(rec),
+          hidden_text: rec.hidden_text,
+          usage: {
+            input_tokens: rec.usage.input_tokens,
+            output_tokens: rec.usage.output_tokens,
+            cache_read_tokens: rec.usage.cache_read_tokens ?? 0,
+            cache_write_tokens: rec.usage.cache_write_tokens ?? 0,
+            cost_usd: rec.usage.cost_usd,
+            model: rec.model,
+          },
+          prompt_hash: rec.prompt_hash,
+          deterministic_count: rec.deterministic_count,
+          model_called: false,
+        };
+      } else {
+        result = await analyzeContent({
+          text: c.text,
+          html: c.html,
+          product: f.product,
+          channel: f.channel,
+          format: c.html ? "html" : "text",
+          rules,
+          offers,
+          skipModel: noModel,
+        });
+        modelsSeen.add(result.usage.model);
+      }
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
     }
     const seconds = (Date.now() - started) / 1000;
-    const expected = f.expected_rule_codes.map(norm);
-    const notExpected = (f.not_expected_rule_codes ?? []).map(norm);
+    const expected = c.expected.map(norm);
+    const notExpected = c.notExpected.map(norm);
     const found = Array.from(new Set((result?.findings ?? []).map((x) => norm(x.rule_code))));
     const hits = expected.filter((c) => found.includes(c));
     const misses = expected.filter((c) => !found.includes(c));
     const falsePositives = found.filter((c) => notExpected.includes(c));
     const unexpected = found.filter((c) => !expected.includes(c) && !notExpected.includes(c));
     rows.push({
-      key: f.key,
-      title: f.title,
+      key: c.key,
+      title: c.title,
       expected,
       found,
       hits,
       misses,
       false_positives: falsePositives,
       unexpected,
-      hidden_expected: Boolean(f.hidden_text),
+      hidden_expected: Boolean(f.hidden_text) && !c.key.endsWith("--revision"),
       hidden_found: (result?.hidden_text.length ?? 0) > 0,
       findings: result?.findings.length ?? 0,
       cost_usd: result?.usage.cost_usd ?? 0,
@@ -177,9 +259,15 @@ async function main() {
   const hiddenFalse = rows.filter((r) => !r.hidden_expected && r.hidden_found).length;
   const errors = rows.filter((r) => r.error).length;
 
+  const modelLabel = noModel
+    ? "none (deterministic only)"
+    : recorded
+      ? `recorded (${Array.from(modelsSeen).join(", ") || "no recordings"}; $0 spent now)`
+      : Array.from(modelsSeen).join(", ") || MODELS.check;
   const summary = {
     ads: rows.length,
-    model: noModel ? "none (deterministic only)" : "anthropic/claude-sonnet-5.5",
+    source: recorded ? "recorded" : noModel ? "deterministic" : "live",
+    model: modelLabel,
     recall: totalExpected ? totalHits / totalExpected : null,
     expected_total: totalExpected,
     expected_found: totalHits,
@@ -202,7 +290,9 @@ async function main() {
   console.log(`Recall: ${summary.recall === null ? "—" : `${(summary.recall * 100).toFixed(0)}%`} (${totalHits}/${totalExpected} expected rule codes found)`);
   console.log(`False positives (listed as not expected): ${totalFp}   Unexpected codes (not listed either way): ${totalUnexpected}`);
   console.log(`Hidden text: ${hiddenHits}/${hiddenRows.length} detected, ${hiddenFalse} false alarms`);
-  console.log(`Cost: $${summary.cost_total_usd.toFixed(4)} total, $${summary.cost_per_ad_usd.toFixed(4)} per ad   Errors: ${errors}   Time: ${summary.seconds_total}s`);
+  console.log(
+    `Cost${recorded ? " (when recorded; nothing spent now)" : ""}: $${summary.cost_total_usd.toFixed(4)} total, $${summary.cost_per_ad_usd.toFixed(4)} per ad   Errors: ${errors}   Time: ${summary.seconds_total}s`,
+  );
   if (errors > 0) process.exitCode = 1;
 }
 

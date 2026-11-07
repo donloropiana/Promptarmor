@@ -227,9 +227,10 @@ export const getWorkspaceRules = cache(async (profileId: string): Promise<Worksp
     });
   }
 
+  // Stable order (kind, then code) whether a rule is on or off: turning one
+  // off must not make it jump to the bottom of the list under your cursor.
   const kindOrder: Record<RuleKind, number> = { regulatory: 0, offer: 1, policy: 2, security: 3 };
   out.sort((a, b) => {
-    if (a.active !== b.active) return a.active ? -1 : 1;
     if (kindOrder[a.kind] !== kindOrder[b.kind]) return kindOrder[a.kind] - kindOrder[b.kind];
     return a.code.localeCompare(b.code);
   });
@@ -379,10 +380,18 @@ export const getWorkspaceOffers = cache(async (profileId: string): Promise<Works
 export type AffectedAd = { id: string; title: string; status: string };
 
 /**
- * Approved ads whose approving check used `offerVersionId`
- * (analysis_runs.offer_version_ids contains it). The run is found through
- * decisions.analysis_run_id of the asset's approved decision, falling back to
- * any run on the approved version. Read under RLS.
+ * Approved ads that relied on `offerVersionId`:
+ *
+ * 1. The approving check recorded it (analysis_runs.offer_version_ids
+ *    contains it), found through decisions.analysis_run_id of the asset's
+ *    approved decision, or any run on the approved version.
+ * 2. Otherwise, when the check never got as far as recording which terms it
+ *    used (it failed or was declined by the budget, so the reviewer approved
+ *    by hand against the terms current at the time): the ad is for the same
+ *    product type and its approval was recorded while this version was the
+ *    current one. "Not AI-screened" approvals still come back when rates change.
+ *
+ * Read under RLS.
  */
 export async function getApprovedAdsUsingOfferVersion(
   supabase: Membership["supabase"],
@@ -391,7 +400,7 @@ export async function getApprovedAdsUsingOfferVersion(
 ): Promise<AffectedAd[]> {
   const { data: assets, error } = await supabase
     .from("assets")
-    .select("id, title, status, approved_version_id, approved_decision_id")
+    .select("id, title, status, product, audience, approved_version_id, approved_decision_id")
     .eq("profile_id", profileId)
     .in("status", ["approved", "approved_with_exceptions"]);
   if (error) {
@@ -402,10 +411,13 @@ export async function getApprovedAdsUsingOfferVersion(
     id: string;
     title: string;
     status: string;
+    product: string | null;
+    audience: string | null;
     approved_version_id: string | null;
     approved_decision_id: string | null;
   };
-  const rows = (assets ?? []) as ARow[];
+  // Cleared samples are hidden everywhere, so a terms change must not resurface them.
+  const rows = ((assets ?? []) as ARow[]).filter((a) => a.audience !== "sample_cleared");
   if (rows.length === 0) return [];
 
   const { data: runs, error: rErr } = await supabase
@@ -418,28 +430,68 @@ export async function getApprovedAdsUsingOfferVersion(
     return [];
   }
   const runRows = (runs ?? []) as { id: string; asset_version_id: string }[];
-  if (runRows.length === 0) return [];
   const runIds = new Set(runRows.map((r) => r.id));
   const versionIds = new Set(runRows.map((r) => r.asset_version_id));
 
   const decisionIds = rows.map((a) => a.approved_decision_id).filter((x): x is string => Boolean(x));
-  const decisionRun = new Map<string, string | null>();
+  const decisionById = new Map<string, { runId: string | null; createdAt: string }>();
   if (decisionIds.length > 0) {
-    const { data: decisions } = await supabase
-      .from("decisions")
-      .select("id, analysis_run_id")
-      .in("id", decisionIds);
-    for (const d of (decisions ?? []) as { id: string; analysis_run_id: string | null }[]) {
-      decisionRun.set(d.id, d.analysis_run_id);
+    const { data: decisions } = await supabase.from("decisions").select("id, analysis_run_id, created_at").in("id", decisionIds);
+    for (const d of (decisions ?? []) as { id: string; analysis_run_id: string | null; created_at: string }[]) {
+      decisionById.set(d.id, { runId: d.analysis_run_id, createdAt: d.created_at });
     }
+  }
+
+  // Runs the approving decisions point at: did they record any terms at all?
+  const decisionRunIds = [...new Set([...decisionById.values()].map((d) => d.runId).filter((x): x is string => Boolean(x)))];
+  const runRecordedOffers = new Map<string, boolean>();
+  if (decisionRunIds.length > 0) {
+    const { data: dRuns } = await supabase.from("analysis_runs").select("id, offer_version_ids").in("id", decisionRunIds);
+    for (const r of (dRuns ?? []) as { id: string; offer_version_ids: string[] | null }[]) {
+      runRecordedOffers.set(r.id, (r.offer_version_ids ?? []).length > 0);
+    }
+  }
+
+  // The window in which this version was the product's current terms.
+  const { data: ov } = await supabase
+    .from("offer_versions")
+    .select("id, offer_id, version_no, created_at, offers(product)")
+    .eq("id", offerVersionId)
+    .maybeSingle();
+  type OVRow = { id: string; offer_id: string; version_no: number; created_at: string; offers: { product: string } | { product: string }[] | null };
+  const version = (ov as OVRow | null) ?? null;
+  let windowStart = 0;
+  let windowEnd = Number.POSITIVE_INFINITY;
+  let offerProduct: string | null = null;
+  if (version) {
+    windowStart = Date.parse(version.created_at);
+    const o = Array.isArray(version.offers) ? version.offers[0] : version.offers;
+    offerProduct = o?.product ?? null;
+    const { data: next } = await supabase
+      .from("offer_versions")
+      .select("created_at")
+      .eq("offer_id", version.offer_id)
+      .gt("version_no", version.version_no)
+      .order("version_no", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    const n = (next as { created_at: string } | null)?.created_at;
+    if (n) windowEnd = Date.parse(n);
   }
 
   const out: AffectedAd[] = [];
   for (const a of rows) {
-    const viaDecision = a.approved_decision_id ? decisionRun.get(a.approved_decision_id) : null;
-    const hit =
-      (viaDecision && runIds.has(viaDecision)) ||
-      (a.approved_version_id ? versionIds.has(a.approved_version_id) : false);
+    const decision = a.approved_decision_id ? decisionById.get(a.approved_decision_id) : undefined;
+    const viaDecision = decision?.runId ?? null;
+    let hit = (viaDecision !== null && runIds.has(viaDecision)) || (a.approved_version_id ? versionIds.has(a.approved_version_id) : false);
+
+    if (!hit && version && offerProduct && decision) {
+      // The check loads every product when the ad's product is unknown/other.
+      const sameProduct = a.product === offerProduct || a.product === "unknown" || a.product === "other" || !a.product;
+      const recorded = viaDecision ? (runRecordedOffers.get(viaDecision) ?? false) : false;
+      const decidedAt = Date.parse(decision.createdAt);
+      if (sameProduct && !recorded && Number.isFinite(decidedAt) && decidedAt >= windowStart && decidedAt < windowEnd) hit = true;
+    }
     if (hit) out.push({ id: a.id, title: a.title, status: a.status });
   }
   return out;

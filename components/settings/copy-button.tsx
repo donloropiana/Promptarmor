@@ -14,6 +14,7 @@ export function CopyButton({
   size = "sm",
   variant = "outline",
   className,
+  disabled = false,
 }: {
   text: string;
   label?: string;
@@ -21,6 +22,7 @@ export function CopyButton({
   size?: "xs" | "sm" | "default";
   variant?: "outline" | "ghost" | "default" | "secondary";
   className?: string;
+  disabled?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
   const timer = useRef<number | null>(null);
@@ -43,7 +45,7 @@ export function CopyButton({
   }
 
   return (
-    <Button type="button" size={size} variant={variant} className={className} onClick={copy} aria-live="polite">
+    <Button type="button" size={size} variant={variant} className={className} onClick={copy} disabled={disabled} aria-live="polite">
       {copied ? <CheckIcon /> : <CopyIcon />}
       {copied ? copiedLabel : label}
     </Button>

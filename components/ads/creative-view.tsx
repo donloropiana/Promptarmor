@@ -190,7 +190,7 @@ function HtmlPreview({ html }: { html: string }) {
         sandbox=""
         referrerPolicy="no-referrer"
         srcDoc={withCsp(html)}
-        className={cn("w-full bg-white transition-[height]", tall ? "h-[1400px]" : "h-[560px]")}
+        className={cn("w-full bg-white transition-[height] duration-200 motion-reduce:transition-none", tall ? "h-[1400px]" : "h-[560px]")}
       />
       <div className="flex items-center justify-between border-t px-3 py-1.5 text-xs text-muted-foreground">
         <span>Rendered in a sandbox: no scripts, no network, no forms.</span>

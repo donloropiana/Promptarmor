@@ -145,6 +145,7 @@ function EmailOtpPanel({ next }: { next: string }) {
             name="email"
             type="email"
             autoComplete="email"
+            spellCheck={false}
             required
             defaultValue={sendState?.email ?? ""}
             placeholder="you@company.com"
@@ -173,6 +174,7 @@ function CodeForm({ email, next }: { email: string; next: string }) {
             name="token"
             inputMode="numeric"
             autoComplete="one-time-code"
+            spellCheck={false}
             pattern="[0-9 ]{6,12}"
             maxLength={12}
             required
@@ -225,7 +227,7 @@ function PasswordSignIn({ next }: { next: string }) {
       <FieldGroup className="gap-3">
         <Field>
           <FieldLabel htmlFor="pw-email">Email</FieldLabel>
-          <Input id="pw-email" name="email" type="email" autoComplete="email" required defaultValue={state?.email ?? ""} />
+          <Input id="pw-email" name="email" type="email" autoComplete="email" spellCheck={false} required defaultValue={state?.email ?? ""} />
         </Field>
         <Field>
           <FieldLabel htmlFor="pw-password">Password</FieldLabel>
@@ -254,7 +256,7 @@ function PasswordSignUp({ next }: { next: string }) {
       <FieldGroup className="gap-3">
         <Field>
           <FieldLabel htmlFor="su-email">Email</FieldLabel>
-          <Input id="su-email" name="email" type="email" autoComplete="email" required defaultValue={state?.email ?? ""} />
+          <Input id="su-email" name="email" type="email" autoComplete="email" spellCheck={false} required defaultValue={state?.email ?? ""} />
         </Field>
         <Field>
           <FieldLabel htmlFor="su-password">Password</FieldLabel>
@@ -275,7 +277,7 @@ function ForgotPassword() {
       <FieldGroup className="gap-3">
         <Field>
           <FieldLabel htmlFor="fp-email">Email</FieldLabel>
-          <Input id="fp-email" name="email" type="email" autoComplete="email" required defaultValue={state?.email ?? ""} />
+          <Input id="fp-email" name="email" type="email" autoComplete="email" spellCheck={false} required defaultValue={state?.email ?? ""} />
           <FieldDescription>We&apos;ll email you a link to choose a new password.</FieldDescription>
         </Field>
         <FormMessage state={state} />

@@ -1,6 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 
-import { runAnalysis, STALE_QUEUED_MS, STUCK_RUNNING_MS } from "@/lib/ai/engine";
+import { getAiMode, runAnalysis, STALE_QUEUED_MS, STUCK_RUNNING_MS } from "@/lib/ai/engine";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 /**
@@ -14,7 +14,8 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
  *   2. queued runs older than 2 minutes -> run, oldest first, while time allows
  *
  * Vercel sends `Authorization: Bearer $CRON_SECRET`. Without CRON_SECRET the
- * route refuses every call (fails closed).
+ * route refuses every call (fails closed). Runs follow AI_MODE like any
+ * other: outside live mode they complete without a model call.
  */
 
 // One check can take up to ~100 s (90 s model timeout + persistence).
@@ -96,5 +97,5 @@ export async function GET(request: Request): Promise<Response> {
   }
   summary.remaining_queued = Math.max(0, ids.length - summary.ran);
 
-  return json({ ok: true, ...summary, duration_ms: Date.now() - startedAt });
+  return json({ ok: true, ai_mode: getAiMode(), ...summary, duration_ms: Date.now() - startedAt });
 }

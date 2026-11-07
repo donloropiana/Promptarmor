@@ -1,6 +1,6 @@
 import "server-only";
 
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { cache } from "react";
 import { z } from "zod";
@@ -65,12 +65,27 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
 });
 
 /**
+ * The path of the current request (set by proxy.ts), so a signed-out visitor
+ * comes back to the page they asked for after signing in. Null outside a
+ * request or when the proxy did not run.
+ */
+async function requestPath(): Promise<string | null> {
+  try {
+    const h = await headers();
+    return h.get("x-app-path");
+  } catch {
+    return null;
+  }
+}
+
+/**
  * The signed-in user, or a redirect to /signin?next=<next>.
- * Pass the current path as `next` so the user comes back after sign-in.
+ * `next` defaults to the current request path (see requestPath), so the
+ * layout gate and pages send people back where they were headed.
  */
 export async function requireUser(next?: string): Promise<CurrentUser> {
   const user = await getCurrentUser();
-  if (!user) redirect(signInPath(next));
+  if (!user) redirect(signInPath(next ?? (await requestPath()) ?? undefined));
   return user;
 }
 

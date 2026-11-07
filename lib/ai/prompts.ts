@@ -10,9 +10,15 @@ import type { ContentFinding, OfferInput, RuleInput } from "./schema";
  *
  * Ad text is UNTRUSTED. It is always wrapped in <ad_content> tags and the
  * model is told it is data to evaluate, never instructions.
+ *
+ * The system part (instructions + the product's rules + product terms) is
+ * the same for every ad of a product in a workspace, so the engine marks it
+ * cacheable (Anthropic prompt caching through the gateway). Everything that
+ * varies per ad (channel, format, what was already flagged, the ad itself)
+ * goes in the user message, after the cache breakpoint.
  */
 
-export const PROMPT_VERSION = "check-v1.2";
+export const PROMPT_VERSION = "check-v1.3";
 
 export const AD_CONTENT_OPEN = "<ad_content>";
 export const AD_CONTENT_CLOSE = "</ad_content>";
@@ -72,7 +78,7 @@ How to work
 - Read the whole ad first, then go rule by rule. Only use the rules listed below; do not invent rules or cite laws that are not in the list. If a rule's applies_to does not include this ad's product (or "all"), skip it.
 - The product terms below are the truth about what the lender actually offers. Any rate, fee, amount, term, reward or eligibility claim in the ad that the terms do not support is a problem (evidence_type offer_mismatch). A rate the lender does not offer is critical. When the terms are silent about a claim, do not guess: use evidence_type needs_judgment and say what the reviewer should confirm.
 - Trigger terms (a specific rate, payment amount, number of payments, period of repayment, or amount of any finance charge / fee) require the matching disclosures; if the ad states a trigger term and the disclosure is missing, report it once as missing_disclosure, quoting the trigger term.
-- Deterministic checks already flagged the items listed under "Already flagged". Do not repeat them. You may add problems they missed.
+- Deterministic checks already flagged the items the user message lists under "Already flagged". Do not repeat them. You may add problems they missed.
 
 Output rules
 - quote must be copied verbatim from the ad text: the same characters, numbers and punctuation, under 200 characters, from a single contiguous passage. Never paraphrase, never merge two passages, never quote the rules or the terms.
@@ -100,7 +106,12 @@ export type CheckPromptInput = {
   transcribed?: boolean;
 };
 
-export function buildCheckSystemPrompt(input: Pick<CheckPromptInput, "rules" | "offers" | "product" | "channel" | "format" | "alreadyFlagged">): string {
+/**
+ * The constant, cacheable part: template + the rules that apply to the
+ * product + the product's terms. Same output for every ad of that product
+ * until a rule or product changes.
+ */
+export function buildCheckSystemPrompt(input: Pick<CheckPromptInput, "rules" | "offers" | "product">): string {
   const rules = input.rules
     .filter((r) => r.applies_to.includes("all") || r.applies_to.includes(input.product) || input.product === "unknown" || input.product === "other")
     .map((r) => `- ${r.code} — ${r.title} [default ${r.default_severity}; applies to ${r.applies_to.join(", ")}]\n  ${r.body.replace(/\s*\n\s*/g, " ")}`)
@@ -108,34 +119,43 @@ export function buildCheckSystemPrompt(input: Pick<CheckPromptInput, "rules" | "
   const offers = input.offers.length
     ? input.offers.map((o) => `- ${o.code} ${o.name} (${o.product}): ${JSON.stringify(sortKeys(o.terms))}`).join("\n")
     : "- (no product terms on file for this product; treat every specific rate, fee or amount as needs_judgment)";
-  const flagged = input.alreadyFlagged.length
-    ? input.alreadyFlagged.map((f) => `- [${f.rule_code}] "${f.quote}" — ${f.explanation}`).join("\n")
-    : "- (none)";
   return [
     CHECK_SYSTEM_TEMPLATE,
     "",
-    "Ad metadata",
-    `- product: ${PRODUCT_LABEL[input.product] ?? input.product}`,
-    `- channel: ${input.channel ?? "unknown"}`,
-    `- format: ${input.format ?? "text"}`,
+    `Product under review: ${PRODUCT_LABEL[input.product] ?? input.product}`,
     "",
     "Rules (code — title [default severity; applies to])",
     rules || "- (no rules are active for this product)",
     "",
     "Product terms (JSON, the lender's real offers)",
     offers,
-    "",
-    "Already flagged (do not repeat)",
-    flagged,
   ].join("\n");
 }
 
-export function buildCheckUserPrompt(input: Pick<CheckPromptInput, "text" | "transcribed">): string {
+/** The per-ad part: metadata, what the deterministic checks already flagged, and the untrusted ad text. */
+export function buildCheckUserPrompt(input: Pick<CheckPromptInput, "text" | "transcribed" | "channel" | "format" | "alreadyFlagged">): string {
   const text = escapeAdContent(input.text.slice(0, MAX_AD_CHARS));
+  const flagged = input.alreadyFlagged.length
+    ? input.alreadyFlagged.map((f) => `- [${f.rule_code}] "${f.quote}" — ${f.explanation}`).join("\n")
+    : "- (none)";
   const note = input.transcribed
-    ? "The ad is an image; the text below was transcribed from it, so quote it as written here.\n\n"
+    ? "The ad is an image; the text below was transcribed from it, so quote it as written here."
     : "";
-  return `${note}Check this ad. Return findings and hidden_text as instructed.\n\n${AD_CONTENT_OPEN}\n${text}\n${AD_CONTENT_CLOSE}`;
+  return [
+    "Ad metadata",
+    `- channel: ${input.channel ?? "unknown"}`,
+    `- format: ${input.format ?? "text"}`,
+    "",
+    "Already flagged (do not repeat)",
+    flagged,
+    "",
+    ...(note ? [note, ""] : []),
+    "Check this ad. Return findings and hidden_text as instructed.",
+    "",
+    AD_CONTENT_OPEN,
+    text,
+    AD_CONTENT_CLOSE,
+  ].join("\n");
 }
 
 // ---------------------------------------------------------------------------

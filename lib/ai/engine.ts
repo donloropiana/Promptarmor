@@ -3,28 +3,43 @@ import "server-only";
 import { generateText } from "ai";
 
 import { sectionAtOffset, type Section } from "@/lib/intake/extract";
+import { normalizedTextHash, sha256Hex } from "@/lib/intake/hash";
 import { requireSupabaseAdminClient } from "@/lib/supabase/admin";
 import { downloadObject } from "@/lib/supabase/storage";
 import type { Database, Json, TablesInsert } from "@/lib/supabase/types";
 import type { Product, Severity, VersionContent } from "@/lib/types/ads";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { analyzeContent, LLM_TIMEOUT_MS } from "./analyze";
+import { analyzeContent, hiddenTextRuleCode, LLM_TIMEOUT_MS, mergeFindings } from "./analyze";
 import { MODELS, costUsd, estimateCostUsd, friendlyAiError, releaseBudget, reserveBudget, settleBudget, type Reservation } from "./budget";
 import { detectHiddenText } from "./hidden-text";
-import { TRANSCRIBE_SYSTEM_PROMPT } from "./prompts";
+import { assertModelCallsAllowed, getAiMode, type RunMode } from "./mode";
+import { deterministicOfferRuleCodes } from "./offer-checks";
+import { promptHash, TRANSCRIBE_SYSTEM_PROMPT } from "./prompts";
 import { matchPriorFindings, type PriorFinding } from "./recheck";
+import { findRecording, recordedFindings } from "./recorded";
 import type { ContentFinding, HiddenTextCandidate, OfferInput, RuleInput } from "./schema";
 import { locateQuote, spanHash } from "./spans";
 
 export { analyzeContent } from "./analyze";
 export { askAboutAd } from "./chat";
+export { getAiMode, describeRunMode, type AiMode, type RunMode } from "./mode";
 
 /**
  * The check engine: claims a queued analysis run, checks the version against
  * the workspace's rules and product terms, and persists findings, alerts,
  * coverage and cost. Never throws: every failure is recorded on the run and
  * a submitted ad falls back to "needs manual review".
+ *
+ * How a run gets its findings (analysis_runs.input_metadata.mode):
+ *   reused  an earlier complete run in the workspace had the same reuse key
+ *           (same text, rules, terms, prompt): its findings are copied at $0
+ *   live    AI_MODE=live: budget reserved, one model call, settled
+ *   replay  AI_MODE=replay and fixtures/recorded has this text: recorded
+ *           findings, $0
+ *   off     AI_MODE=off (the default outside production): deterministic
+ *           findings only (product terms, hidden text), $0, still 'complete'
+ * The deterministic checks run first in every mode. See docs/ai-policy.md.
  *
  * Call sites:
  *   after(() => startAnalysisForVersion(versionId))   right after intake
@@ -132,6 +147,58 @@ export async function nudgeStaleRuns(profileId: string, options: { limit?: numbe
   return summary;
 }
 
+/**
+ * The reuse key (docs/schema.md §6.5): same normalized text (or, for images
+ * awaiting transcription, the same bytes), same rule versions, same product
+ * terms and same prompt => the same result, so it is copied instead of
+ * bought again.
+ */
+export function computeReuseKey(textHash: string, rules: LoadedRule[], offers: LoadedOffer[], promptHashValue: string): string {
+  const ruleIds = rules.map((r) => r.rule_version_id).sort();
+  const offerIds = offers.map((o) => o.offer_version_id).sort();
+  return sha256Hex([textHash, ruleIds.join(","), offerIds.join(","), promptHashValue].join("\n"));
+}
+
+/** Everything the finishing steps need, gathered once per run. */
+type RunContext = {
+  runId: string;
+  asset: AssetRow;
+  version: VersionRow;
+  sections: Section[];
+  rules: LoadedRule[];
+  offers: LoadedOffer[];
+  product: Product;
+  format: string;
+  channel: string | null;
+  /** Text findings are anchored into ("" when quotes cannot be verified, e.g. a transcript). */
+  anchorText: string;
+  /** The full text that was checked (for metadata and the transcript). */
+  text: string;
+  transcribed: boolean;
+  /** Hidden-text candidates the deterministic scan found (alerts already inserted). */
+  deterministicHidden: HiddenTextCandidate[];
+  deterministicAlertCount: number;
+  promptHash: string;
+  reuseKey: string | null;
+};
+
+type FinishInput = {
+  mode: RunMode;
+  /** analysis_runs.model: the model id, 'recorded', or 'none'. */
+  model: string;
+  findings: ContentFinding[];
+  /** Parallel to findings: the finding each one was copied from (reused runs). */
+  reusedFromFindingIds?: (string | null)[];
+  reusedFromRunId?: string | null;
+  /** Hidden-text candidates that did not come from the deterministic scan (model, recording, or the reused run). */
+  extraHidden: HiddenTextCandidate[];
+  usage: { inputTokens: number; outputTokens: number; costUsd: number; cacheReadTokens: number; cacheWriteTokens: number };
+  /** Rule codes (upper case) that count as checked when nothing was found; "all" after a model call. */
+  checkedCodes: Set<string> | "all";
+  deterministicCount: number;
+  metadata?: Record<string, Json>;
+};
+
 /** Claims and runs one analysis run end to end. Never throws. */
 export async function runAnalysis(runId: string): Promise<void> {
   let admin: Admin;
@@ -156,11 +223,12 @@ export async function runAnalysis(runId: string): Promise<void> {
   }
   if (!run) return;
 
+  const mode = getAiMode();
   let reservation: Reservation | null = null;
   let settled = false;
   let asset: AssetRow | null = null;
   /** What the deterministic checks found, kept so a failed model call still leaves real issues behind. */
-  let fallback: { findings: ContentFinding[]; version: VersionRow; text: string; sections: Section[]; rules: LoadedRule[]; transcribed: boolean } | null = null;
+  let fallback: { findings: ContentFinding[]; version: VersionRow; text: string; sections: Section[]; rules: LoadedRule[]; offers: LoadedOffer[]; transcribed: boolean } | null = null;
 
   try {
     const version = await loadVersion(admin, run);
@@ -169,6 +237,7 @@ export async function runAnalysis(runId: string): Promise<void> {
     const sections: Section[] = Array.isArray(content.sections) ? content.sections : [];
     const product: Product = isProduct(asset.product) ? asset.product : "unknown";
     const format = content.format ?? "text";
+    const channel = asset.channel ?? content.meta?.channel ?? null;
 
     // ---- stage: extract -------------------------------------------------
     let text = version.extracted_text ?? "";
@@ -179,6 +248,7 @@ export async function runAnalysis(runId: string): Promise<void> {
     await setStage(admin, runId, "rules");
     const rules = await loadRules(admin, asset.profile_id, product);
     const offers = await loadOffers(admin, asset.profile_id, product);
+    const hash = promptHash(rules, offers);
 
     // ---- stage: hidden text (deterministic, before any model call) -------
     await setStage(admin, runId, "hidden_text");
@@ -186,10 +256,108 @@ export async function runAnalysis(runId: string): Promise<void> {
     const alertCount = await insertAlerts(admin, asset.profile_id, version.id, deterministicHidden, "deterministic");
     if (alertCount > 0) await flagManualReview(admin, asset, "hidden_text");
 
+    // ---- stage: offer checks (deterministic, kept even if the model fails) ----
+    await setStage(admin, runId, "offer_checks");
+    const deterministic = await analyzeContent({
+      text,
+      html: content.html,
+      product,
+      channel: channel ?? undefined,
+      format,
+      rules,
+      offers,
+      transcribed,
+      skipModel: true,
+    });
+    fallback = { findings: deterministic.findings, version, text, sections, rules, offers, transcribed: false };
+
+    // Identical text (or identical image bytes) keyed with the exact rules, terms and prompt.
+    const textHash = version.normalized_text_hash ?? (needsTranscription ? version.content_sha256 : normalizedTextHash(text));
+    const reuseKey = textHash ? computeReuseKey(textHash, rules, offers, hash) : null;
+
+    const ctx: RunContext = {
+      runId,
+      asset,
+      version,
+      sections,
+      rules,
+      offers,
+      product,
+      format,
+      channel,
+      anchorText: text,
+      text,
+      transcribed: false,
+      deterministicHidden,
+      deterministicAlertCount: alertCount,
+      promptHash: hash,
+      reuseKey,
+    };
+    const deterministicCodes = new Set([...deterministicOfferRuleCodes(rules, product), hiddenTextRuleCode(rules).toUpperCase()]);
+
+    // ---- stage: reuse (every mode): a previous identical check costs nothing ----
+    await setStage(admin, runId, "reuse_lookup");
+    const previous = reuseKey ? await findReusableRun(admin, asset.profile_id, reuseKey, runId) : null;
+    if (previous) {
+      const copied = await loadFindingsToCopy(admin, previous.id, rules);
+      const previousHidden = await loadModelAlerts(admin, previous.asset_version_id);
+      await finishRun(admin, ctx, {
+        mode: "reused",
+        model: previous.model ?? "none",
+        findings: copied.map((c) => c.finding),
+        reusedFromFindingIds: copied.map((c) => c.id),
+        reusedFromRunId: previous.id,
+        extraHidden: previousHidden,
+        usage: { inputTokens: 0, outputTokens: 0, costUsd: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
+        checkedCodes: "all",
+        deterministicCount: deterministic.deterministic_count,
+        metadata: { reused_from_run_id: previous.id, reused_from_version_id: previous.asset_version_id, reused_findings: copied.length },
+      });
+      return;
+    }
+
+    // ---- no model allowed: recorded findings (replay) or deterministic only (off) ----
+    if (mode !== "live") {
+      const recording = mode === "replay" && !needsTranscription ? await findRecording(textHash) : null;
+      if (recording) {
+        await finishRun(admin, ctx, {
+          mode: "replay",
+          model: "recorded",
+          findings: mergeFindings(deterministic.findings, recordedFindings(recording), rules),
+          extraHidden: recording.hidden_text.filter((h) => !deterministicHidden.some((d) => sameExcerpt(d.excerpt, h.excerpt))),
+          usage: { inputTokens: 0, outputTokens: 0, costUsd: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
+          checkedCodes: "all",
+          deterministicCount: deterministic.deterministic_count,
+          metadata: {
+            recorded: {
+              key: recording.key,
+              model: recording.model,
+              prompt_hash: recording.prompt_hash,
+              recorded_at: recording.recorded_at,
+              usage: recording.usage as unknown as Json,
+            },
+          },
+        });
+        return;
+      }
+      await finishRun(admin, ctx, {
+        mode: "off",
+        model: "none",
+        findings: deterministic.findings,
+        extraHidden: [],
+        usage: { inputTokens: 0, outputTokens: 0, costUsd: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
+        checkedCodes: deterministicCodes,
+        deterministicCount: deterministic.deterministic_count,
+        metadata: { ai_mode: mode, ...(needsTranscription ? { transcription_skipped: true } : {}) },
+      });
+      return;
+    }
+
     // ---- stage: budget --------------------------------------------------
     await setStage(admin, runId, "budget");
+    const checkModel = MODELS.check;
     const promptChars = text.length + JSON.stringify(rules).length + JSON.stringify(offers.map((o) => o.terms)).length + 4_500;
-    let estUsd = estimateCostUsd(MODELS.check, promptChars, EXPECTED_OUTPUT_TOKENS);
+    let estUsd = estimateCostUsd(checkModel, promptChars, EXPECTED_OUTPUT_TOKENS);
     if (needsTranscription) estUsd += estimateCostUsd(MODELS.cheap, 4_000, 2_000);
     reservation = await reserveBudget(admin, {
       profileId: asset.profile_id,
@@ -212,22 +380,10 @@ export async function runAnalysis(runId: string): Promise<void> {
       text = t.text;
       transcribed = true;
       transcriptionUsage = { inputTokens: t.inputTokens, outputTokens: t.outputTokens, costUsd: t.costUsd };
+      // Re-run the deterministic checks on the transcript so a failed model call still keeps them.
+      const onTranscript = await analyzeContent({ text, product, channel: channel ?? undefined, format, rules, offers, transcribed, skipModel: true });
+      fallback = { findings: onTranscript.findings, version, text: "", sections, rules, offers, transcribed };
     }
-
-    // ---- stage: offer checks (deterministic, kept even if the model fails) ----
-    await setStage(admin, runId, "offer_checks");
-    const deterministic = await analyzeContent({
-      text,
-      html: content.html,
-      product,
-      channel: asset.channel ?? content.meta?.channel,
-      format,
-      rules,
-      offers,
-      transcribed,
-      skipModel: true,
-    });
-    fallback = { findings: deterministic.findings, version, text: transcribed ? "" : text, sections, rules, transcribed };
 
     // ---- stage: llm -----------------------------------------------------
     await setStage(admin, runId, "llm");
@@ -235,7 +391,7 @@ export async function runAnalysis(runId: string): Promise<void> {
       text,
       html: content.html,
       product,
-      channel: asset.channel ?? content.meta?.channel,
+      channel: channel ?? undefined,
       format,
       rules,
       offers,
@@ -256,93 +412,27 @@ export async function runAnalysis(runId: string): Promise<void> {
     });
     settled = true;
 
-    // Alerts the model noticed that the deterministic scan did not.
-    const modelHidden = analysis.hidden_text.filter(
-      (h) => !deterministicHidden.some((d) => d.excerpt.toLowerCase().includes(h.excerpt.toLowerCase().slice(0, 60))),
-    );
-    const modelAlertCount = await insertAlerts(admin, asset.profile_id, version.id, modelHidden, "model");
-    if (modelAlertCount > 0) await flagManualReview(admin, asset, "hidden_text");
-
-    // ---- stages: verify, recheck, persist --------------------------------
-    const persisted = await persistFindings(admin, runId, {
-      profileId: asset.profile_id,
-      version,
-      findings: analysis.findings,
-      text: transcribed ? "" : text,
-      sections,
-      rules,
-      transcribed,
-    });
-    const { verified, insertedIds, prior } = persisted;
-
-    // rule_results + coverage
-    const findingIdsByRuleVersion = new Map<string, string[]>();
-    verified.forEach((v, i) => {
-      if (!v.rule_version_id || !insertedIds[i]) return;
-      const list = findingIdsByRuleVersion.get(v.rule_version_id) ?? [];
-      list.push(insertedIds[i]);
-      findingIdsByRuleVersion.set(v.rule_version_id, list);
-    });
-    const ruleResults = rules.map((r) => {
-      const applies = r.applies_to.includes("all") || r.applies_to.includes(product) || product === "unknown" || product === "other";
-      const ids = findingIdsByRuleVersion.get(r.rule_version_id) ?? [];
-      const result = ids.length > 0 ? "flagged" : !applies ? "na" : analysis.model_called ? "pass" : "not_checked";
-      return { rule_version_id: r.rule_version_id, result, finding_ids: ids };
-    });
-    const coverage = {
-      rules_total: rules.length,
-      rules_checked: ruleResults.filter((r) => r.result !== "na" && r.result !== "not_checked").length,
-      offers_used: offers.map((o) => o.code),
-      findings: verified.length,
-      verified_spans: verified.filter((v) => v.verified).length,
-      hidden_text_alerts: alertCount + modelAlertCount,
-      deterministic_findings: analysis.deterministic_count,
-    };
-    const inputMetadata: Record<string, Json> = {
-      format,
-      product,
-      channel: asset.channel ?? null,
-      chars: text.length,
-      sections: sections.length,
-      transcribed,
-      ...(transcribed ? { transcript: text.slice(0, 20_000) } : {}),
-      hidden_text_count: deterministicHidden.length + modelHidden.length,
-      prior_findings: prior.length,
-    };
-
-    const { error: completeError } = await admin
-      .from("analysis_runs")
-      .update({
-        status: "complete",
-        stage: "done",
+    await finishRun(
+      admin,
+      { ...ctx, anchorText: transcribed ? "" : text, text, transcribed },
+      {
+        mode: "live",
         model: analysis.usage.model,
-        prompt_hash: analysis.prompt_hash,
-        rule_version_ids: rules.map((r) => r.rule_version_id),
-        offer_version_ids: offers.map((o) => o.offer_version_id),
-        rule_results: ruleResults as Json,
-        coverage: coverage as Json,
-        input_metadata: inputMetadata as Json,
-        input_tokens: inputTokens,
-        output_tokens: outputTokens,
-        cost_usd: totalCost,
-        error: null,
-        completed_at: new Date().toISOString(),
-      })
-      .eq("id", runId);
-    if (completeError) throw new Error(`run completion failed: ${completeError.code ?? ""} ${completeError.message}`);
-
-    await logEvent(admin, asset.profile_id, asset.id, "analysis.completed", {
-      run_id: runId,
-      asset_version_id: version.id,
-      findings: verified.length,
-      critical: verified.filter((v) => v.finding.severity === "critical").length,
-      major: verified.filter((v) => v.finding.severity === "major").length,
-      minor: verified.filter((v) => v.finding.severity === "minor").length,
-      hidden_text_alerts: alertCount + modelAlertCount,
-      cost_usd: totalCost,
-      model: analysis.usage.model,
-      prompt_hash: analysis.prompt_hash,
-    });
+        findings: analysis.findings,
+        // Alerts the model noticed that the deterministic scan did not.
+        extraHidden: analysis.hidden_text.filter((h) => !deterministicHidden.some((d) => sameExcerpt(d.excerpt, h.excerpt))),
+        usage: {
+          inputTokens,
+          outputTokens,
+          costUsd: totalCost,
+          cacheReadTokens: analysis.usage.cache_read_tokens,
+          cacheWriteTokens: analysis.usage.cache_write_tokens,
+        },
+        checkedCodes: "all",
+        deterministicCount: analysis.deterministic_count,
+        metadata: transcribed ? { transcription_tokens: transcriptionUsage.inputTokens + transcriptionUsage.outputTokens } : {},
+      },
+    );
   } catch (err) {
     const message = errorText(err);
     console.error(`[ai/engine] run ${runId} failed:`, message);
@@ -364,8 +454,12 @@ export async function runAnalysis(runId: string): Promise<void> {
         await admin
           .from("analysis_runs")
           .update({
-            coverage: { rules_total: fallback.rules.length, rules_checked: 0, deterministic_findings: kept.insertedIds.length, model_called: false } as Json,
+            coverage: { rules_total: fallback.rules.length, rules_checked: 0, deterministic_findings: kept.insertedIds.length, model_called: false, mode } as Json,
             rule_version_ids: fallback.rules.map((r) => r.rule_version_id),
+            // Recorded on failure too, so the audit record (and "Rates changed" after a
+            // product-terms edit) knows which terms the product-terms check used.
+            offer_version_ids: fallback.offers.map((o) => o.offer_version_id),
+            input_metadata: { ...(run.input_metadata as Record<string, Json> | null), mode, ai_mode: mode } as Json,
           })
           .eq("id", runId);
       } catch (persistErr) {
@@ -373,6 +467,184 @@ export async function runAnalysis(runId: string): Promise<void> {
       }
     }
   }
+}
+
+/** Shared tail of every successful run: alerts, findings, rule results, coverage, the run row and the audit event. */
+async function finishRun(admin: Admin, ctx: RunContext, input: FinishInput): Promise<void> {
+  const { runId, asset, version, rules, offers, product } = ctx;
+
+  const extraAlertCount = await insertAlerts(admin, asset.profile_id, version.id, input.extraHidden, detectorFor(input.mode));
+  if (extraAlertCount > 0) await flagManualReview(admin, asset, "hidden_text");
+
+  const { verified, insertedIds, prior } = await persistFindings(admin, runId, {
+    profileId: asset.profile_id,
+    version,
+    findings: input.findings,
+    text: ctx.anchorText,
+    sections: ctx.sections,
+    rules,
+    transcribed: ctx.transcribed,
+    reusedFromFindingIds: input.reusedFromFindingIds,
+  });
+
+  const findingIdsByRuleVersion = new Map<string, string[]>();
+  verified.forEach((v, i) => {
+    if (!v.rule_version_id || !insertedIds[i]) return;
+    const list = findingIdsByRuleVersion.get(v.rule_version_id) ?? [];
+    list.push(insertedIds[i]);
+    findingIdsByRuleVersion.set(v.rule_version_id, list);
+  });
+  const ruleResults = rules.map((r) => {
+    const applies = r.applies_to.includes("all") || r.applies_to.includes(product) || product === "unknown" || product === "other";
+    const ids = findingIdsByRuleVersion.get(r.rule_version_id) ?? [];
+    const checked = input.checkedCodes === "all" || input.checkedCodes.has(r.code.trim().toUpperCase());
+    const result = ids.length > 0 ? "flagged" : !applies ? "na" : checked ? "pass" : "not_checked";
+    return { rule_version_id: r.rule_version_id, result, finding_ids: ids };
+  });
+  const hiddenAlerts = ctx.deterministicAlertCount + extraAlertCount;
+  const coverage = {
+    rules_total: rules.length,
+    rules_checked: ruleResults.filter((r) => r.result === "pass" || r.result === "flagged").length,
+    offers_used: offers.map((o) => o.code),
+    findings: verified.length,
+    verified_spans: verified.filter((v) => v.verified).length,
+    hidden_text_alerts: hiddenAlerts,
+    deterministic_findings: input.deterministicCount,
+    model_called: input.mode === "live",
+    mode: input.mode,
+  };
+  const inputMetadata: Record<string, Json> = {
+    mode: input.mode,
+    model: input.model,
+    format: ctx.format,
+    product,
+    channel: ctx.channel,
+    chars: ctx.text.length,
+    sections: ctx.sections.length,
+    transcribed: ctx.transcribed,
+    ...(ctx.transcribed ? { transcript: ctx.text.slice(0, 20_000) } : {}),
+    hidden_text_count: ctx.deterministicHidden.length + input.extraHidden.length,
+    prior_findings: prior.length,
+    cache_read_tokens: input.usage.cacheReadTokens,
+    cache_write_tokens: input.usage.cacheWriteTokens,
+    ...(input.metadata ?? {}),
+  };
+
+  const { error: completeError } = await admin
+    .from("analysis_runs")
+    .update({
+      status: "complete",
+      stage: "done",
+      model: input.model,
+      prompt_hash: ctx.promptHash,
+      rule_version_ids: rules.map((r) => r.rule_version_id),
+      offer_version_ids: offers.map((o) => o.offer_version_id),
+      rule_results: ruleResults as Json,
+      coverage: coverage as Json,
+      input_metadata: inputMetadata as Json,
+      input_tokens: input.usage.inputTokens,
+      output_tokens: input.usage.outputTokens,
+      cost_usd: input.usage.costUsd,
+      reuse_key: ctx.reuseKey,
+      reused_from_run_id: input.reusedFromRunId ?? null,
+      error: null,
+      completed_at: new Date().toISOString(),
+    })
+    .eq("id", runId);
+  if (completeError) throw new Error(`run completion failed: ${completeError.code ?? ""} ${completeError.message}`);
+
+  await logEvent(admin, asset.profile_id, asset.id, "analysis.completed", {
+    run_id: runId,
+    asset_version_id: version.id,
+    mode: input.mode,
+    findings: verified.length,
+    critical: verified.filter((v) => v.finding.severity === "critical").length,
+    major: verified.filter((v) => v.finding.severity === "major").length,
+    minor: verified.filter((v) => v.finding.severity === "minor").length,
+    hidden_text_alerts: hiddenAlerts,
+    cost_usd: input.usage.costUsd,
+    model: input.model,
+    prompt_hash: ctx.promptHash,
+    ...(input.reusedFromRunId ? { reused_from_run_id: input.reusedFromRunId } : {}),
+  });
+}
+
+function detectorFor(mode: RunMode): AlertDetector {
+  return mode === "replay" ? "recorded" : mode === "reused" ? "reused" : "model";
+}
+
+function sameExcerpt(a: string, b: string): boolean {
+  return a.toLowerCase().includes(b.toLowerCase().slice(0, 60));
+}
+
+// ---------------------------------------------------------------------------
+// Reuse ($0): a previous complete run with the same reuse key
+// ---------------------------------------------------------------------------
+
+type ReusableRun = Pick<RunRow, "id" | "model" | "asset_version_id" | "input_metadata" | "completed_at">;
+
+function previousMode(run: ReusableRun): string | null {
+  const meta = run.input_metadata;
+  if (meta && typeof meta === "object" && !Array.isArray(meta) && typeof meta.mode === "string") return meta.mode;
+  return null;
+}
+
+/** The newest complete run in the profile with this key that carries real findings (an 'off' run has none worth copying). */
+async function findReusableRun(admin: Admin, profileId: string, reuseKey: string, currentRunId: string): Promise<ReusableRun | null> {
+  const { data, error } = await admin
+    .from("analysis_runs")
+    .select("id, model, asset_version_id, input_metadata, completed_at")
+    .eq("profile_id", profileId)
+    .eq("reuse_key", reuseKey)
+    .eq("status", "complete")
+    .neq("id", currentRunId)
+    .order("completed_at", { ascending: false })
+    .limit(10);
+  if (error) {
+    console.warn("[ai/engine] reuse lookup failed:", error.code, error.message);
+    return null;
+  }
+  // Only a run that had model-grade findings is worth copying; an 'off' run is just the deterministic pass again.
+  return (data ?? []).find((r) => previousMode(r) !== "off") ?? null;
+}
+
+/** The AI findings of a run as ContentFindings, with the ids they are copied from. */
+async function loadFindingsToCopy(admin: Admin, runId: string, rules: LoadedRule[]): Promise<{ id: string; finding: ContentFinding }[]> {
+  const { data, error } = await admin
+    .from("findings")
+    .select("id, rule_version_id, severity, evidence_type, quote, explanation, suggested_fix, suggested_copy")
+    .eq("analysis_run_id", runId)
+    .eq("origin", "ai")
+    .order("created_at", { ascending: true });
+  if (error) throw new Error(`reuse: findings load failed: ${error.message}`);
+  const codeByVersion = new Map(rules.map((r) => [r.rule_version_id, r.code]));
+  return (data ?? []).map((f) => ({
+    id: f.id,
+    finding: {
+      rule_code: (f.rule_version_id && codeByVersion.get(f.rule_version_id)) || "UNMATCHED-RULE",
+      severity: (["critical", "major", "minor"].includes(f.severity) ? f.severity : "major") as Severity,
+      quote: f.quote ?? "",
+      explanation: f.explanation ?? "",
+      suggested_fix: f.suggested_fix ?? "",
+      suggested_copy: f.suggested_copy ?? undefined,
+      evidence_type: (["exact_match", "offer_mismatch", "missing_disclosure", "needs_judgment"].includes(f.evidence_type)
+        ? f.evidence_type
+        : "needs_judgment") as ContentFinding["evidence_type"],
+    },
+  }));
+}
+
+/** Hidden-text alerts on a version that did not come from the deterministic scan (so they are copied rather than re-detected). */
+async function loadModelAlerts(admin: Admin, versionId: string): Promise<HiddenTextCandidate[]> {
+  const { data } = await admin.from("security_alerts").select("kind, excerpt, location").eq("asset_version_id", versionId);
+  const out: HiddenTextCandidate[] = [];
+  for (const a of data ?? []) {
+    const loc = a.location && typeof a.location === "object" && !Array.isArray(a.location) ? (a.location as Record<string, unknown>) : {};
+    if (loc.detector === "deterministic") continue;
+    if (!a.excerpt) continue;
+    out.push({ kind: a.kind === "possible_injection" ? "possible_injection" : "hidden_text", excerpt: a.excerpt, location: typeof loc.where === "string" ? loc.where : "text" });
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -538,6 +810,8 @@ async function persistFindings(
     transcribed: boolean;
     /** False on the failure path, where the run's stage stays 'failed'. */
     touchStage?: boolean;
+    /** Parallel to findings: the finding each row is copied from (reused runs). */
+    reusedFromFindingIds?: (string | null)[];
   },
 ): Promise<{ verified: VerifiedFinding[]; insertedIds: string[]; prior: PriorFinding[] }> {
   const stage = async (name: string) => {
@@ -572,6 +846,7 @@ async function persistFindings(
     suggested_copy: v.finding.suggested_copy ?? null,
     prior_finding_id: matches[i].prior_finding_id,
     recheck_status: matches[i].recheck_status,
+    reused_from_finding_id: input.reusedFromFindingIds?.[i] ?? null,
   }));
 
   let insertedIds: string[] = [];
@@ -637,9 +912,10 @@ function verifyFinding(f: ContentFinding, text: string, sections: Section[], rul
 // ---------------------------------------------------------------------------
 
 async function transcribe(bytes: Uint8Array, mediaType: string): Promise<{ text: string; inputTokens: number; outputTokens: number; costUsd: number }> {
+  assertModelCallsAllowed("image transcription");
   const result = await generateText({
     model: MODELS.cheap,
-    system: TRANSCRIBE_SYSTEM_PROMPT,
+    instructions: TRANSCRIBE_SYSTEM_PROMPT,
     messages: [
       {
         role: "user",
@@ -668,12 +944,15 @@ async function setStage(admin: Admin, runId: string, stage: string): Promise<voi
   if (error) console.warn("[ai/engine] stage update failed:", error.code, error.message);
 }
 
+/** Who found an alert: the deterministic scan, the model, a recording, or the run it was copied from. */
+type AlertDetector = "deterministic" | "model" | "recorded" | "reused";
+
 async function insertAlerts(
   admin: Admin,
   profileId: string,
   versionId: string,
   candidates: HiddenTextCandidate[],
-  detector: "deterministic" | "model",
+  detector: AlertDetector,
 ): Promise<number> {
   if (candidates.length === 0) return 0;
   const rows: TablesInsert<"security_alerts">[] = candidates.slice(0, 20).map((c) => ({

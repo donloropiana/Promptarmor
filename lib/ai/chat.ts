@@ -6,6 +6,7 @@ import { requireSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { VersionContent } from "@/lib/types/ads";
 
 import { MODELS, costUsd, friendlyAiError, isAiGatewayConfigured, releaseBudget, reserveBudget, settleBudget } from "./budget";
+import { getAiMode } from "./mode";
 import { ASK_SYSTEM_PROMPT, buildAskUserPrompt } from "./prompts";
 
 /**
@@ -120,6 +121,11 @@ export async function askAboutAd(input: { profileId: string; userId: string; ass
     };
   }
 
+  // No AI spend outside live mode (docs/ai-policy.md): say so instead of answering.
+  const mode = getAiMode();
+  if (mode !== "live") {
+    return { ok: false, error: "This server runs with the AI step off (test mode), so nothing was spent. It answers in production." };
+  }
   if (!isAiGatewayConfigured()) {
     return { ok: false, error: "Ask about this ad is not available: the AI gateway is not configured on this server." };
   }
@@ -135,7 +141,7 @@ export async function askAboutAd(input: { profileId: string; userId: string; ass
   try {
     const result = await generateText({
       model: MODELS.cheap,
-      system: ASK_SYSTEM_PROMPT,
+      instructions: ASK_SYSTEM_PROMPT,
       prompt: buildAskUserPrompt({
         adText,
         findings: issueList,
@@ -149,9 +155,10 @@ export async function askAboutAd(input: { profileId: string; userId: string; ass
     });
     const inputTokens = result.usage.inputTokens ?? 0;
     const outputTokens = result.usage.outputTokens ?? 0;
+    const cache = { read: result.usage.inputTokenDetails?.cacheReadTokens ?? 0, write: result.usage.inputTokenDetails?.cacheWriteTokens ?? 0 };
     await settleBudget(admin, {
       requestId: reservation.requestId,
-      costUsd: costUsd(MODELS.cheap, inputTokens, outputTokens),
+      costUsd: costUsd(MODELS.cheap, inputTokens, outputTokens, cache),
       inputTokens,
       outputTokens,
       model: MODELS.cheap,

@@ -34,6 +34,12 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(target);
   }
 
+  // The requested path, for lib/auth/dal.ts requireUser(): a signed-out
+  // visitor is sent to /signin?next=<this path> and comes back here after.
+  // Set here so a client cannot forge it (it is only ever used as a
+  // validated same-origin redirect target).
+  request.headers.set("x-app-path", `${url.pathname}${url.search}`);
+
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(env.url, env.publishableKey, {

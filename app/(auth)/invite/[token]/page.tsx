@@ -84,14 +84,14 @@ async function InviteContent({ params }: { params: Params }) {
     return (
       <AuthShell
         title="Invitation not found"
-        description="This invitation doesn't exist or is no longer valid. Ask a profile owner to send a new one."
+        description="This invitation doesn't exist or is no longer valid. Ask a workspace owner to send a new one."
         footer={<BackHome />}
       />
     );
   }
 
   const roleLabel = row.role === "owner" ? "Owner" : "Member";
-  const inviter = row.invited_by_name?.trim() || "A profile owner";
+  const inviter = row.invited_by_name?.trim() || "A workspace owner";
 
   if (row.status === "accepted") {
     return (

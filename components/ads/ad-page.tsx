@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Ban, ClockAlert, Copy, Keyboard, MailCheck, RefreshCw, ShieldOff, Sparkles, TrendingUp } from "lucide-react";
+import { ArrowLeft, Ban, ClockAlert, Copy, FlaskConical, Keyboard, MailCheck, Recycle, RefreshCw, ShieldOff, Sparkles, TrendingUp } from "lucide-react";
 import { cn } from "cn";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, useTransition } from "react";
@@ -17,13 +17,13 @@ import { AskBox } from "./ask-box";
 import { AutoRefresh } from "./auto-refresh";
 import { CreativeView, type CreativeViewMode } from "./creative-view";
 import { DecisionBar, NO_DIALOGS, blockingReason, type DecisionDialogs } from "./decision-bar";
-import { APPROVED_STATUSES, formatDateTime, formatDuration, formatUsd, relativeTime, shortSha, stageLabel } from "./format";
+import { APPROVED_STATUSES, formatDuration, formatUsd, relativeTime, shortSha, stageLabel } from "./format";
 import { HiddenTextAlert } from "./hidden-text-alert";
 import { History } from "./history";
-import { IssuesPanel } from "./issues-panel";
+import { IssuesPanel, issueTitle } from "./issues-panel";
+import { LocalDateTime, useLocalDateTime } from "./local-time";
 import { MetaChips } from "./meta-chips";
 import { ReviewSession } from "./review-session";
-import { SeverityWord } from "./severity";
 import { AD_SHORTCUTS, ShortcutsDialog, isTypingTarget } from "./shortcuts-dialog";
 import { ReasonTags, StatusWord } from "./status";
 import { ChangeSummaryLine, WordDiff, summariseChanges } from "./what-changed";
@@ -47,7 +47,7 @@ function tagsFor(detail: AdDetail): string[] {
   if (detail.status === "re_review_due") tags.push("Rates changed");
   if (detail.status === "approved_with_exceptions") tags.push("With exceptions");
   if (detail.changedAfterApproval) tags.push("Changed after approval");
-  if (detail.status === "needs_manual_review" && !detail.runs.some((r) => r.versionId === detail.latest.id && r.status === "complete")) tags.push("Not AI-screened");
+  if (!detail.checking && !detail.aiScreened && detail.latestRun && detail.latestRun.status !== "queued" && detail.latestRun.status !== "running") tags.push("Not AI-screened");
   if (detail.latest.versionNo > 1 && !APPROVED_STATUSES.has(detail.status)) tags.push(`V${detail.latest.versionNo}`);
   else if (detail.decisions.length === 0 && !detail.checking) tags.push("New");
   return tags;
@@ -55,6 +55,7 @@ function tagsFor(detail: AdDetail): string[] {
 
 export function AdPage({ detail, userId }: { detail: AdDetail; userId: string }) {
   const isDesktop = useIsDesktop();
+  const submittedAbsolute = useLocalDateTime(detail.submittedAt ?? detail.createdAt);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [formFor, setFormFor] = useState<string | null>(null);
   const [dialogs, setDialogs] = useState<DecisionDialogs>(NO_DIALOGS);
@@ -65,11 +66,11 @@ export function AdPage({ detail, userId }: { detail: AdDetail; userId: string })
   const approved = APPROVED_STATUSES.has(detail.status);
   // Approved ads are frozen (withdraw first); rejected/withdrawn ones can still be re-decided.
   const readOnly = approved;
-  const markFindings = useMemo(() => [...detail.findings, ...detail.partialFindings], [detail.findings, detail.partialFindings]);
   const openIssueIds = useMemo(() => detail.findings.filter((f) => f.open || f.disposition?.disposition === "accepted_exception").map((f) => f.id), [detail.findings]);
+  const openCount = detail.findings.filter((f) => f.open).length;
   const changes = useMemo(() => (detail.previous ? summariseChanges(detail.findings, detail.previousFindings) : null), [detail.findings, detail.previousFindings, detail.previous]);
   const latestRun = detail.latestRun;
-  const runFailed = latestRun && (latestRun.status === "failed" || latestRun.status === "declined_budget");
+  const runFailed = Boolean(latestRun && (latestRun.status === "failed" || latestRun.status === "declined_budget"));
 
   const blocked = blockingReason(detail);
   const select = useCallback((id: string | null) => {
@@ -139,7 +140,7 @@ export function AdPage({ detail, userId }: { detail: AdDetail; userId: string })
       ) : (
         <CreativeView
           version={detail.latest}
-          findings={markFindings}
+          findings={detail.findings}
           fileUrl={detail.fileUrl}
           selectedId={selectedId}
           onSelect={(id) => select(id)}
@@ -150,54 +151,15 @@ export function AdPage({ detail, userId }: { detail: AdDetail; userId: string })
       )}
     </div>
   );
+  const alert = <HiddenTextAlert alerts={detail.alerts} issueCount={openCount} />;
 
   const right = (
     <div className="min-w-0 space-y-4 p-4 sm:p-5">
-      <HiddenTextAlert alerts={detail.alerts} issueCount={detail.findings.filter((f) => f.open).length} />
+      {isDesktop && alert}
 
-      {detail.checking && (
-        <div className="flex items-start gap-3 rounded-xl border bg-card p-4" role="status" aria-live="polite">
-          <Spinner className="mt-0.5 size-4" />
-          <div className="min-w-0">
-            <div className="text-sm font-medium">Checking V{detail.latest.versionNo}…</div>
-            <p className="text-sm text-muted-foreground">{stageLabel(latestRun?.stage, latestRun?.status)}. Usually under a minute. Issues appear here as soon as it finishes.</p>
-          </div>
-        </div>
-      )}
+      {approved && detail.approval && <ApprovalRecord detail={detail} />}
 
-      {!detail.checking && runFailed && (
-        <div className="flex items-start gap-3 rounded-xl border bg-card p-4">
-          <ShieldOff aria-hidden className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-          <div className="min-w-0 flex-1">
-            <div className="text-sm font-medium">Not AI-screened</div>
-            <p className="text-sm text-muted-foreground">
-              {latestRun?.status === "declined_budget" ? "Today's AI budget is used up, so this version was not checked automatically." : "The automatic check did not complete."} Read the ad yourself; an
-              approval will be recorded as a manual approval with your rationale.
-            </p>
-            {detail.partialFindings.length > 0 && (
-              <div className="mt-2">
-                <div className="text-xs font-medium text-muted-foreground">Found by the product-terms check before it stopped (not part of the decision record):</div>
-                <ul className="mt-1 space-y-1">
-                  {detail.partialFindings.map((f) => (
-                    <li key={f.id}>
-                      <button
-                        type="button"
-                        onClick={() => select(selectedId === f.id ? null : f.id)}
-                        aria-pressed={selectedId === f.id}
-                        className={cn("flex w-full flex-wrap items-center gap-x-2 rounded-md px-1 py-0.5 text-left text-sm hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:outline-none", selectedId === f.id && "bg-muted")}
-                      >
-                        <SeverityWord severity={f.severity} />
-                        {f.quote && <q className="[quotes:'“'_'”']">{f.quote}</q>}
-                        {f.explanation && <span className="text-muted-foreground">{f.explanation}</span>}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      <CheckStatus detail={detail} openCount={openCount} />
 
       {detail.status === "re_review_due" && (
         <div className="flex items-start gap-3 rounded-xl border bg-card p-4">
@@ -226,8 +188,6 @@ export function AdPage({ detail, userId }: { detail: AdDetail; userId: string })
 
       {detail.status === "changes_requested" && <WaitingForRevision detail={detail} />}
 
-      {approved && detail.approval && <ApprovalRecord detail={detail} />}
-
       {changes && detail.previous && (
         <section className="rounded-xl border bg-card p-3.5">
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -240,7 +200,7 @@ export function AdPage({ detail, userId }: { detail: AdDetail; userId: string })
                 <li key={f.id} className="flex items-start gap-2">
                   <span className="mt-0.5 shrink-0 rounded-full border px-1.5 text-[11px] font-medium text-foreground">Fixed</span>
                   <span className="min-w-0">
-                    {f.rule?.title ?? "Issue"}
+                    {issueTitle(f)}
                     {f.quote ? (
                       <>
                         {" "}
@@ -259,15 +219,24 @@ export function AdPage({ detail, userId }: { detail: AdDetail; userId: string })
       )}
 
       <section aria-label="Issues">
-        <h2 className="mb-2 text-sm font-medium">
-          Issues on V{detail.latest.versionNo}
-          {detail.findings.length > 0 && <span className="ml-1.5 text-xs font-normal tabular-nums text-muted-foreground">{detail.findings.filter((f) => f.open).length} open</span>}
-        </h2>
+        <div className="mb-2 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+          <h2 className="text-sm font-medium">
+            Issues on V{detail.latest.versionNo}
+            {detail.findings.length > 0 && (
+              <span className="ml-1.5 text-xs font-normal tabular-nums text-muted-foreground">
+                {openCount} open{openCount !== detail.findings.length ? ` of ${detail.findings.length}` : ""}
+              </span>
+            )}
+          </h2>
+          {!detail.checking && !detail.aiScreened && detail.findings.length > 0 && (
+            <span className="text-xs text-muted-foreground">From the product-terms check only. The AI check did not run.</span>
+          )}
+        </div>
         {detail.checking && detail.findings.length === 0 ? (
           <p className="text-sm text-muted-foreground">Issues will appear here when the check finishes.</p>
-        ) : runFailed && detail.findings.length === 0 ? (
+        ) : runFailed && !detail.aiScreened && detail.findings.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            This version was not checked by AI, so there is no issue list. Anything the product-terms check found is listed above; read the ad yourself before deciding.
+            The AI check did not run and the product-terms check found nothing, so there is no issue list. Read the ad yourself before deciding; your approval will need a written rationale.
           </p>
         ) : (
           <IssuesPanel
@@ -280,6 +249,13 @@ export function AdPage({ detail, userId }: { detail: AdDetail; userId: string })
             formFor={formFor}
             onFormFor={setFormFor}
             readOnly={readOnly}
+            emptyNote={
+              !detail.aiScreened
+                ? "The AI check did not run and the product-terms check found nothing. Read the ad yourself before approving."
+                : latestRun?.mode === "off"
+                  ? "The product-terms check found nothing; the AI step is off on this server. Read the ad yourself before approving."
+                  : undefined
+            }
           />
         )}
       </section>
@@ -322,7 +298,7 @@ export function AdPage({ detail, userId }: { detail: AdDetail; userId: string })
                   <>From {detail.submitterName || detail.submitterEmail || detail.latest.authorLabel || "a member"}</>
                 )}
               </span>
-              <span title={formatDateTime(detail.submittedAt ?? detail.createdAt)}>{relativeTime(detail.submittedAt ?? detail.createdAt)}</span>
+              <span title={submittedAbsolute}>{relativeTime(detail.submittedAt ?? detail.createdAt, detail.now)}</span>
               {detail.seenIn > 1 && (
                 <span className="inline-flex items-center gap-1">
                   <Copy aria-hidden className="size-3" /> Seen in {detail.seenIn} places
@@ -347,6 +323,8 @@ export function AdPage({ detail, userId }: { detail: AdDetail; userId: string })
           </ResizablePanelGroup>
         ) : (
           <div className="grid md:grid-cols-[55%_45%]">
+            {/* Stacked: the pinned alert comes first, before the creative, so it is never below the fold. */}
+            {detail.alerts.length > 0 && <div className="p-4 pb-0 sm:p-5 sm:pb-0">{alert}</div>}
             {left}
             <div className="border-t md:border-t-0 md:border-l">{right}</div>
           </div>
@@ -356,6 +334,101 @@ export function AdPage({ detail, userId }: { detail: AdDetail; userId: string })
       <DecisionBar detail={detail} userId={userId} dialogs={dialogs} onDialogs={setDialogs} />
       <ShortcutsDialog open={showShortcuts} onOpenChange={setShowShortcuts} shortcuts={AD_SHORTCUTS} />
     </div>
+  );
+}
+
+/**
+ * One card that says how this version was checked. Reads the run's mode
+ * (analysis_runs.input_metadata.mode) so test runs, replays and reuse are
+ * named honestly, and the failure path explains what still ran.
+ */
+function CheckStatus({ detail, openCount }: { detail: AdDetail; openCount: number }) {
+  const run = detail.latestRun;
+  const v = detail.latest.versionNo;
+  if (detail.checking) {
+    return (
+      <div className="flex items-start gap-3 rounded-xl border bg-card p-4" role="status" aria-live="polite">
+        <Spinner className="mt-0.5 size-4" />
+        <div className="min-w-0">
+          <div className="text-sm font-medium">Checking V{v}…</div>
+          <p className="text-sm text-muted-foreground">{stageLabel(run?.stage, run?.status)}. Usually under a minute. Issues appear here as soon as it finishes.</p>
+        </div>
+      </div>
+    );
+  }
+  if (!run) return null;
+
+  const fromCheck = detail.findings.filter((f) => f.origin === "ai").length;
+  const found = fromCheck > 0 ? `found ${fromCheck} issue${fromCheck === 1 ? "" : "s"}, listed below` : "found nothing";
+  const ranLine = `The product-terms check still ran and ${found}.`;
+
+  if (!detail.aiScreened) {
+    const why =
+      run.status === "declined_budget"
+        ? "Today's AI budget is used up, so the AI step was skipped."
+        : run.status === "failed"
+          ? "The AI step did not complete."
+          : "The AI step has not run yet.";
+    return (
+      <div className="flex items-start gap-3 rounded-xl border bg-card p-4" role="status">
+        <ShieldOff aria-hidden className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-medium">Not AI-screened</div>
+          <p className="text-sm text-muted-foreground">
+            {why} {ranLine} Read the ad yourself; approving it is recorded as a manual approval with your written rationale.
+          </p>
+          {run.error && (
+            <details className="mt-1.5 text-xs text-muted-foreground">
+              <summary className="cursor-pointer select-none">What went wrong</summary>
+              <p className="mt-1 break-words">{run.error}</p>
+            </details>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (run.mode === "off") {
+    return (
+      <div className="flex items-start gap-3 rounded-xl border bg-card p-4" role="status">
+        <FlaskConical aria-hidden className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-medium">AI check skipped (test mode)</div>
+          <p className="text-sm text-muted-foreground">This server runs with the AI step off, so only the product-terms check ran; it {found}. No AI spend.</p>
+        </div>
+      </div>
+    );
+  }
+  if (run.mode === "replay") {
+    return (
+      <div className="flex items-start gap-3 rounded-xl border bg-card p-4" role="status">
+        <FlaskConical aria-hidden className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-medium">Recorded check · no AI spend</div>
+          <p className="text-sm text-muted-foreground">
+            A recorded result for this content was replayed instead of calling the model. {openCount} issue{openCount === 1 ? "" : "s"} open.
+          </p>
+        </div>
+      </div>
+    );
+  }
+  if (run.mode === "reused") {
+    return (
+      <div className="flex items-start gap-3 rounded-xl border bg-card p-4" role="status">
+        <Recycle aria-hidden className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-medium">Reused from an identical ad · $0</div>
+          <p className="text-sm text-muted-foreground">The same content was checked before, so its findings were reused without a new model call.</p>
+        </div>
+      </div>
+    );
+  }
+  // Live model call: one quiet line with the cost (the history has the details).
+  return (
+    <p className="text-xs text-muted-foreground" role="status">
+      Checked {relativeTime(run.completedAt ?? run.createdAt, detail.now)}
+      {run.model ? ` · ${run.model}` : ""} · {formatUsd(run.costUsd, { precise: true })}
+    </p>
   );
 }
 
@@ -371,7 +444,7 @@ function WaitingForRevision({ detail }: { detail: AdDetail }) {
           <p className="text-sm text-muted-foreground">It appears here automatically when the submitter replies or updates the file.</p>
           {cr && (
             <p className="mt-1 text-xs text-muted-foreground">
-              Requested by {cr.authorLabel} {relativeTime(cr.createdAt)} · {cr.items.length} item{cr.items.length === 1 ? "" : "s"}
+              Requested by {cr.authorLabel} {relativeTime(cr.createdAt, detail.now)} · {cr.items.length} item{cr.items.length === 1 ? "" : "s"}
               {cr.dueDate ? ` · due ${cr.dueDate}` : ""}
             </p>
           )}
@@ -420,7 +493,9 @@ function ApprovalRecord({ detail }: { detail: AdDetail }) {
           {a.selfApproved ? " (self-approval)" : ""}
         </dd>
         <dt className="text-muted-foreground">When</dt>
-        <dd>{formatDateTime(a.createdAt)}</dd>
+        <dd>
+          <LocalDateTime iso={a.createdAt} />
+        </dd>
         <dt className="text-muted-foreground">Exceptions</dt>
         <dd>{a.exceptions.length === 0 ? "None" : a.exceptions.length}</dd>
         <dt className="text-muted-foreground">Reviewer time</dt>

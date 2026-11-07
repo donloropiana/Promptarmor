@@ -69,7 +69,7 @@ export interface RunSyncOptions {
   pageSize?: number;
   /** Cap for an initial backfill or gap rescan. Default 50. */
   maxBackfillItems?: number;
-  /** Initial backfill window. Default 30 days. */
+  /** Initial backfill window. Default 14 days (what the Connected accounts card promises). */
   backfillDays?: number;
   /** Discard the stored cursor and start a fresh backfill. */
   resetCursor?: boolean;
@@ -257,7 +257,7 @@ export async function runConnectionSync(connectionId: string, opts: RunSyncOptio
     maxItems: Math.max(1, Math.min(opts.pageSize ?? 20, 100)),
     deadline,
     maxBackfillItems: Math.max(1, opts.maxBackfillItems ?? 50),
-    backfillDays: Math.max(1, opts.backfillDays ?? 30),
+    backfillDays: Math.max(1, opts.backfillDays ?? 14),
   };
   const ctx: PipelineCtx = { admin, conn, row, adapter, stats, ownerConnectionIds, deadline };
 

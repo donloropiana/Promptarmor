@@ -303,9 +303,21 @@ export async function listAdsWith(db: Db, profileId: string, userId: string): Pr
     created_at: string;
     analysis_runs: { status: string } | { status: string }[] | null;
   };
-  const findings = ((findingsRes.data ?? []) as unknown as FindingLite[]).filter((f) => {
+  // Issues a reviewer should see on a version: reviewer findings plus the AI
+  // findings from a complete run. When no run completed (the model was
+  // refused, the budget ran out), the deterministic product-terms findings
+  // the failed run kept are shown instead, flagged as not decision-grade.
+  const allFindings = (findingsRes.data ?? []) as unknown as FindingLite[];
+  const versionsWithComplete = new Set<string>();
+  for (const f of allFindings) {
     const run = Array.isArray(f.analysis_runs) ? f.analysis_runs[0] : f.analysis_runs;
-    return f.origin === "reviewer" || run?.status === "complete";
+    if (f.origin !== "reviewer" && run?.status === "complete") versionsWithComplete.add(f.asset_version_id);
+  }
+  const findings = allFindings.filter((f) => {
+    if (f.origin === "reviewer") return true;
+    const run = Array.isArray(f.analysis_runs) ? f.analysis_runs[0] : f.analysis_runs;
+    if (run?.status === "complete") return true;
+    return !versionsWithComplete.has(f.asset_version_id) && (run?.status === "failed" || run?.status === "declined_budget");
   });
   const dispositionMap = new Map<string, { disposition: string | null; severity_override: string | null }>();
   if (findings.length) {
@@ -319,10 +331,14 @@ export async function listAdsWith(db: Db, profileId: string, userId: string): Pr
     for (const d of data ?? []) if (d.finding_id) dispositionMap.set(d.finding_id, d);
   }
   const topByVersion = new Map<string, FindingLite>();
+  const openByVersion = new Map<string, { critical: number; major: number; minor: number }>();
   for (const f of findings) {
     const d = dispositionMap.get(f.id);
     if (d?.disposition && d.disposition !== "fix_required") continue;
     const sev = asSeverity(d?.severity_override ?? f.severity);
+    const counts = openByVersion.get(f.asset_version_id) ?? { critical: 0, major: 0, minor: 0 };
+    counts[sev] += 1;
+    openByVersion.set(f.asset_version_id, counts);
     const cur = topByVersion.get(f.asset_version_id);
     if (!cur) {
       topByVersion.set(f.asset_version_id, { ...f, severity: sev });
@@ -429,9 +445,13 @@ export async function listAdsWith(db: Db, profileId: string, userId: string): Pr
         ? { kind: "image", url: signed.get(version.storage_path)! }
         : { kind: "icon", icon: thumbIconFor(content.format, q.channel) };
 
-    const openCritical = q.open_critical ?? 0;
-    const openMajor = q.open_major ?? 0;
-    const openMinor = q.open_minor ?? 0;
+    // The queue view only counts decision-grade findings; fall back to what we
+    // loaded (deterministic findings on a not-screened version) so the row
+    // still shows the real risk.
+    const loadedOpen = openByVersion.get(q.latest_version_id!);
+    const openCritical = (q.open_critical ?? 0) || loadedOpen?.critical || 0;
+    const openMajor = (q.open_major ?? 0) || loadedOpen?.major || 0;
+    const openMinor = (q.open_minor ?? 0) || loadedOpen?.minor || 0;
     const submittedAt = q.submitted_at ?? q.created_at ?? new Date(0).toISOString();
     const ageMs = Math.max(0, Date.now() - new Date(submittedAt).getTime());
     // Worst first: hidden text > critical > major > minor > age (older is worse).
@@ -597,7 +617,9 @@ export async function getAdsMetricsWith(db: Db, profileId: string): Promise<AdsM
     out.aiRemaining = Number(budget.remaining_usd ?? 0);
   }
 
-  const sampleIds = new Set((assetsRes.data ?? []).filter((a) => a.audience === "sample").map((a) => a.id));
+  // Samples are never counted, and clearing them (audience 'sample_cleared')
+  // must not turn their practice decisions into real numbers.
+  const sampleIds = new Set((assetsRes.data ?? []).filter((a) => isSampleAudience(a.audience)).map((a) => a.id));
   const assetById = new Map((assetsRes.data ?? []).map((a) => [a.id, a]));
   const decisions = (decisionsRes.data ?? []).filter((d) => !sampleIds.has(d.asset_id) && d.decision !== "withdrawn");
   out.decisions = decisions.length;
@@ -626,7 +648,7 @@ export async function getAdsMetricsWith(db: Db, profileId: string): Promise<AdsM
   }
   out.approvedFirstTimePct = byAsset.size ? Math.round((firstTime / byAsset.size) * 100) : null;
   out.daysToApproval = approvalDays.length ? round1(approvalDays.reduce((a, b) => a + b, 0) / approvalDays.length) : null;
-  out.exceptions = (assetsRes.data ?? []).filter((a) => a.status === "approved_with_exceptions" && a.audience !== "sample").length;
+  out.exceptions = (assetsRes.data ?? []).filter((a) => a.status === "approved_with_exceptions" && !isSampleAudience(a.audience)).length;
 
   // Minutes per ad: reviewer active time on decided assets' versions.
   const decidedVersionIds = [...new Set(decisions.map((d) => d.asset_version_id))];
@@ -640,6 +662,11 @@ export async function getAdsMetricsWith(db: Db, profileId: string): Promise<AdsM
     out.minutesPerAd = byAsset.size ? round1(total / 60 / byAsset.size) : null;
   }
   return out;
+}
+
+/** Sample ads, including ones a reviewer has cleared, never count toward the workspace metrics. */
+function isSampleAudience(audience: string | null | undefined): boolean {
+  return audience === "sample" || audience === "sample_cleared";
 }
 
 function round1(n: number): number {
@@ -692,6 +719,13 @@ export type AdFinding = {
   } | null;
   /** Open = no disposition, or fix_required. */
   open: boolean;
+  /**
+   * True when the database will weigh this issue at decision time (reviewer
+   * findings and AI findings from a complete run). False for the deterministic
+   * product-terms findings a failed run kept: shown, actionable, but an
+   * approval over them is recorded as a manual approval with a rationale.
+   */
+  decisionGrade: boolean;
   createdAt: string;
 };
 
@@ -717,7 +751,16 @@ export type AdRun = {
   createdAt: string;
   completedAt: string | null;
   reusedFromRunId: string | null;
+  /**
+   * How the check ran (analysis_runs.input_metadata.mode): 'off' = the AI
+   * step was skipped on purpose (test mode), 'replay' = a recorded result was
+   * replayed, 'reused' = findings reused from an identical ad at $0, 'live' =
+   * a real model call. Null when the run did not get that far.
+   */
+  mode: CheckMode | null;
 };
+
+export type CheckMode = "off" | "replay" | "reused" | "live";
 
 export type AdDecision = {
   id: string;
@@ -783,19 +826,20 @@ export type AdDetail = {
   previous: AdVersion | null;
   /** Signed URL for the latest version's file (pdf/image), if any. */
   fileUrl: string | null;
-  findings: AdFinding[];
   /**
-   * AI findings on the latest version from a run that did NOT complete
-   * (deterministic checks that ran before the model failed). Shown for
-   * information; the database ignores them when deciding.
+   * Issues on the latest version: reviewer findings plus AI findings from the
+   * latest complete run, or, when no run completed, the deterministic
+   * product-terms findings the failed run kept (decisionGrade = false).
    */
-  partialFindings: AdFinding[];
-  /** Findings on the previous version (for "What changed"). */
+  findings: AdFinding[];
+  /** Findings on the previous version, chosen the same way (for "What changed"). */
   previousFindings: AdFinding[];
   alerts: AdAlert[];
   runs: AdRun[];
   latestRun: AdRun | null;
   checking: boolean;
+  /** A complete check exists for the latest version (its findings are decision-grade). */
+  aiScreened: boolean;
   decisions: AdDecision[];
   approval: AdDecision | null;
   changeRequests: AdChangeRequest[];
@@ -806,6 +850,8 @@ export type AdDetail = {
   memberCount: number;
   seenIn: number;
   nextNeedsReviewId: string | null;
+  /** Server time when the detail was read; relative ages use it so server and client render the same text. */
+  now: number;
 };
 
 type RawFinding = Database["public"]["Tables"]["findings"]["Row"];
@@ -830,7 +876,7 @@ export async function getAdDetailWith(db: Db, assetId: string, profileId: string
       .order("version_no", { ascending: true }),
     db
       .from("analysis_runs")
-      .select("id, asset_version_id, status, stage, model, cost_usd, input_tokens, output_tokens, error, created_at, completed_at, reused_from_run_id")
+      .select("id, asset_version_id, status, stage, model, cost_usd, input_tokens, output_tokens, error, created_at, completed_at, reused_from_run_id, input_metadata")
       .eq("profile_id", profileId)
       .in(
         "asset_version_id",
@@ -862,7 +908,7 @@ export async function getAdDetailWith(db: Db, assetId: string, profileId: string
   if (versionIds.length > 2 || versionIds.some((id) => id !== asset.latest_version_id && id !== asset.approved_version_id)) {
     const { data } = await db
       .from("analysis_runs")
-      .select("id, asset_version_id, status, stage, model, cost_usd, input_tokens, output_tokens, error, created_at, completed_at, reused_from_run_id")
+      .select("id, asset_version_id, status, stage, model, cost_usd, input_tokens, output_tokens, error, created_at, completed_at, reused_from_run_id, input_metadata")
       .eq("profile_id", profileId)
       .in("asset_version_id", versionIds)
       .order("created_at", { ascending: true });
@@ -882,8 +928,18 @@ export async function getAdDetailWith(db: Db, assetId: string, profileId: string
 
   const findingRows = (findingsRes.data ?? []) as RawFinding[];
   const completeRunIds = new Set(runRows.filter((r) => r.status === "complete").map((r) => r.id));
-  // Decision rules: findings from every complete run on the version + reviewer findings.
-  const usableFindings = findingRows.filter((f) => f.origin === "reviewer" || (f.analysis_run_id && completeRunIds.has(f.analysis_run_id)));
+  // Per version: every complete run counts (the database weighs all of them);
+  // with no complete run, the newest failed/declined run's deterministic
+  // findings are shown instead.
+  const fallbackRunIds = new Set<string>();
+  for (const vid of findingVersionIds) {
+    const runsHere = runRows.filter((r) => r.asset_version_id === vid);
+    if (runsHere.some((r) => r.status === "complete")) continue;
+    const fallback = [...runsHere].reverse().find((r) => r.status === "failed" || r.status === "declined_budget");
+    if (fallback) fallbackRunIds.add(fallback.id);
+  }
+  const isDecisionGrade = (f: RawFinding) => f.origin === "reviewer" || Boolean(f.analysis_run_id && completeRunIds.has(f.analysis_run_id));
+  const usableFindings = findingRows.filter((f) => isDecisionGrade(f) || Boolean(f.analysis_run_id && fallbackRunIds.has(f.analysis_run_id)));
 
   const dispositions = new Map<string, Database["public"]["Views"]["finding_latest_dispositions"]["Row"]>();
   if (usableFindings.length) {
@@ -995,17 +1051,13 @@ export async function getAdDetailWith(db: Db, assetId: string, profileId: string
         : null,
       disposition,
       open: !disposition || disposition.disposition === "fix_required",
+      decisionGrade: isDecisionGrade(f),
       createdAt: f.created_at,
     };
   };
 
   const sortFindings = (a: AdFinding, b: AdFinding) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity] || a.createdAt.localeCompare(b.createdAt);
   const findings = usableFindings.filter((f) => f.asset_version_id === latest.id).map(toFinding).sort(sortFindings);
-  const usableIds = new Set(usableFindings.map((f) => f.id));
-  const partialFindings = findingRows
-    .filter((f) => f.asset_version_id === latest.id && !usableIds.has(f.id) && f.origin === "ai")
-    .map(toFinding)
-    .sort(sortFindings);
   const previousFindings = previous ? usableFindings.filter((f) => f.asset_version_id === previous.id).map(toFinding).sort(sortFindings) : [];
 
   const runs: AdRun[] = runRows.map((r) => ({
@@ -1021,8 +1073,10 @@ export async function getAdDetailWith(db: Db, assetId: string, profileId: string
     createdAt: r.created_at,
     completedAt: r.completed_at,
     reusedFromRunId: r.reused_from_run_id,
+    mode: checkModeOf(r),
   }));
   const latestRun = runs.filter((r) => r.versionId === latest.id).at(-1) ?? null;
+  const aiScreened = runs.some((r) => r.versionId === latest.id && r.status === "complete");
 
   const versionNoById = new Map(versions.map((v) => [v.id, v.versionNo]));
   const decisions: AdDecision[] = (decisionsRes.data ?? []).map((d) => ({
@@ -1117,12 +1171,12 @@ export async function getAdDetailWith(db: Db, assetId: string, profileId: string
     previous,
     fileUrl,
     findings,
-    partialFindings,
     previousFindings,
     alerts,
     runs,
     latestRun,
     checking: latestRun?.status === "queued" || latestRun?.status === "running",
+    aiScreened,
     decisions,
     approval,
     changeRequests,
@@ -1135,7 +1189,18 @@ export async function getAdDetailWith(db: Db, assetId: string, profileId: string
     memberCount: membersRes.data?.length ?? 1,
     seenIn: sourcesRes.data?.length ?? 0,
     nextNeedsReviewId: next?.id ?? null,
+    now: Date.now(),
   };
+}
+
+/** Reads how a run was executed from input_metadata.mode (or the reuse pointer). */
+function checkModeOf(r: { status: string; reused_from_run_id: string | null; input_metadata: Json | null }): CheckMode | null {
+  if (r.reused_from_run_id) return "reused";
+  const meta = r.input_metadata && typeof r.input_metadata === "object" && !Array.isArray(r.input_metadata) ? (r.input_metadata as Record<string, unknown>) : null;
+  const mode = meta?.mode;
+  if (mode === "off" || mode === "replay" || mode === "reused" || mode === "live") return mode;
+  if (r.status === "complete") return "live";
+  return null;
 }
 
 function describeLocation(loc: Json | null): string | null {

@@ -22,6 +22,7 @@ import Link from "next/link";
 import type { AdListRow, ThumbIcon } from "@/lib/data/ads";
 
 import { relativeTime } from "./format";
+import { useLocalDateTime } from "./local-time";
 import { RiskMark } from "./severity";
 import { ReasonTags, StatusWord } from "./status";
 
@@ -65,9 +66,13 @@ function FromIcon({ kind, provider }: { kind: AdListRow["from"]["kind"]; provide
 }
 
 export function AdRow({ row, now }: { row: AdListRow; now: number }) {
-  const tags = row.tags;
-  // "No open issues" would be misleading on an ad the AI never checked.
-  const showRiskMark = !row.checking && !(row.notScreened && !row.openCritical && !row.openMajor && !row.openMinor);
+  const submittedAbsolute = useLocalDateTime(row.submittedAt);
+  // Samples sit under their own heading in the list, so the tag would repeat it.
+  const tags = row.isSample ? row.tags.filter((t) => t !== "Sample") : row.tags;
+  // The risk mark only earns its place when there is something open; the
+  // second line already says "No open issues" or "Not checked by AI".
+  const showRiskMark = !row.checking && row.openCritical + row.openMajor + row.openMinor > 0;
+  const openTotal = row.openCritical + row.openMajor + row.openMinor;
   return (
     <li>
       <Link
@@ -82,7 +87,7 @@ export function AdRow({ row, now }: { row: AdListRow; now: number }) {
             <div className="min-w-0 truncate text-sm font-medium text-foreground">{row.title}</div>
             <div className="flex shrink-0 items-center gap-2">
               <StatusWord status={row.status} checking={row.checking} className="hidden sm:inline-flex" />
-              <span className="text-xs tabular-nums text-muted-foreground" title={new Date(row.submittedAt).toLocaleString()}>
+              <span className="text-xs tabular-nums text-muted-foreground" title={submittedAbsolute}>
                 {relativeTime(row.submittedAt, now)}
               </span>
             </div>
@@ -91,6 +96,11 @@ export function AdRow({ row, now }: { row: AdListRow; now: number }) {
           <div className="mt-0.5 truncate text-sm text-muted-foreground">
             {row.checking ? (
               <span>Checking against the rules and product terms…</span>
+            ) : row.hiddenText ? (
+              // Hidden text is why the row sorts first: say so instead of quoting the instruction back.
+              <span>
+                Hidden text aimed at the reviewer{openTotal > 0 ? ` and ${openTotal} open issue${openTotal === 1 ? "" : "s"}` : ""}. Open to read it.
+              </span>
             ) : row.topIssue ? (
               <>
                 {row.topIssue.quote && <q className="font-medium text-foreground">{row.topIssue.quote}</q>}
@@ -99,8 +109,6 @@ export function AdRow({ row, now }: { row: AdListRow; now: number }) {
               </>
             ) : row.notScreened ? (
               <span>Not checked by AI. Review it by hand.</span>
-            ) : row.hiddenText ? (
-              <span>Hidden text aimed at the reviewer was found. Open to read it.</span>
             ) : (
               <span>No open issues</span>
             )}

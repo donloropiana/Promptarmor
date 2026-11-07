@@ -4,12 +4,14 @@ import { safeNextPath, signInPath } from "@/lib/auth/redirect";
 import { createClient } from "@/lib/supabase/server";
 
 /**
- * OAuth (Google) PKCE return URL: /auth/callback?code=...&next=/path
+ * PKCE return URL: /auth/callback?code=...&next=/path
  *
- * Exchanges the code for a session (the PKCE verifier cookie was set by the
- * signInWithGoogle Server Action in this same browser), then redirects to a
- * validated same-origin `next`. Email links do not come here: they go to
- * /auth/confirm (token_hash flow, works across devices).
+ * Supabase's default email templates (and any PKCE flow started in this
+ * browser) land here. Exchanges the code for a session, then redirects to a
+ * validated same-origin `next`. The scanner-safe templates in docs/setup.md
+ * use /auth/confirm (token_hash flow, works across devices) instead. There
+ * is no Google or Microsoft sign-in: members connect those accounts in
+ * Settings, after signing in by email.
  */
 export async function GET(request: NextRequest) {
   const url = request.nextUrl;

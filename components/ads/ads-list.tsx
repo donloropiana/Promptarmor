@@ -1,6 +1,6 @@
 "use client";
 
-import { Inbox, Keyboard } from "lucide-react";
+import { Inbox, Keyboard, Sparkles } from "lucide-react";
 import { cn } from "cn";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -43,14 +43,17 @@ export function AdsList({
 }) {
   const router = useRouter();
   const [showShortcuts, setShowShortcuts] = useState(false);
-  const listRef = useRef<HTMLUListElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
-  const visible = useMemo(() => {
+  // Real ads first (worst first), then samples under their own heading so
+  // they are never mistaken for work and never count.
+  const { real, samples } = useMemo(() => {
     let list = tab === "all" ? rows : rows.filter((r) => r.tab === tab);
     if (tab === "approved") list = [...list].sort((a, b) => (b.approvedAt ?? b.updatedAt).localeCompare(a.approvedAt ?? a.updatedAt));
     if (tab === "changes_requested") list = [...list].sort((a, b) => a.updatedAt.localeCompare(b.updatedAt));
-    return list;
+    return { real: list.filter((r) => !r.isSample), samples: list.filter((r) => r.isSample) };
   }, [rows, tab]);
+  const visible = real.length + samples.length;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -112,7 +115,7 @@ export function AdsList({
 
       {tab === "needs_review" && <TriageRows items={triage} now={now} />}
 
-      {visible.length === 0 ? (
+      {visible === 0 ? (
         <Empty className="rounded-xl border bg-card py-12">
           <EmptyHeader>
             <EmptyMedia variant="icon">
@@ -123,11 +126,31 @@ export function AdsList({
           </EmptyHeader>
         </Empty>
       ) : (
-        <ul ref={listRef} className="divide-y rounded-xl border bg-card" aria-label={`${TABS.find((t) => t.key === tab)?.label} ads`}>
-          {visible.map((row) => (
-            <AdRow key={row.id} row={row} now={now} />
-          ))}
-        </ul>
+        <div ref={listRef} className="space-y-3">
+          {real.length > 0 && (
+            <ul className="divide-y rounded-xl border bg-card" aria-label={`${TABS.find((t) => t.key === tab)?.label} ads`}>
+              {real.map((row) => (
+                <AdRow key={row.id} row={row} now={now} />
+              ))}
+            </ul>
+          )}
+          {samples.length > 0 && (
+            <section aria-labelledby="samples-heading">
+              <div className="mb-1.5 flex items-center gap-2 px-1 text-xs text-muted-foreground">
+                <Sparkles aria-hidden className="size-3.5" />
+                <h2 id="samples-heading" className="font-medium">
+                  Samples
+                </h2>
+                <span>· not counted · clear them in Workspace settings</span>
+              </div>
+              <ul className="divide-y rounded-xl border border-dashed bg-card" aria-label="Sample ads">
+                {samples.map((row) => (
+                  <AdRow key={row.id} row={row} now={now} />
+                ))}
+              </ul>
+            </section>
+          )}
+        </div>
       )}
 
       {tab === "needs_review" && <SkippedLine items={skipped} now={now} />}

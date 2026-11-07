@@ -49,6 +49,7 @@ export function InviteForm({ profileId }: { profileId: string }) {
               onChange={(e) => setEmail(e.target.value)}
               required
               autoComplete="off"
+              spellCheck={false}
               placeholder="teammate@company.com"
             />
           </Field>
@@ -64,7 +65,7 @@ export function InviteForm({ profileId }: { profileId: string }) {
               </SelectContent>
             </Select>
           </Field>
-          <Button type="submit" disabled={pending || !email.trim()} className="sm:mb-0">
+          <Button type="submit" disabled={pending} className="sm:mb-0">
             {pending ? <Spinner /> : <UserPlusIcon />}
             Invite
           </Button>

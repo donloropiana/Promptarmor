@@ -4,6 +4,7 @@ import type { Product, Severity } from "@/lib/types/ads";
 
 import { MODELS, costUsd } from "./budget";
 import { detectHiddenText } from "./hidden-text";
+import { assertModelCallsAllowed } from "./mode";
 import { runOfferChecks } from "./offer-checks";
 import { buildCheckSystemPrompt, buildCheckUserPrompt, promptHash } from "./prompts";
 import { AnalysisOutputSchema, type ContentFinding, type HiddenTextCandidate, type OfferInput, type RuleInput } from "./schema";
@@ -16,6 +17,9 @@ import { normalizeForMatch } from "./spans";
  * Order: deterministic hidden-text scan -> deterministic offer checks ->
  * one structured-output call to the check model (told what is already
  * flagged) -> merge and dedupe by quote + rule.
+ *
+ * The model call is refused unless AI_MODE=live (lib/ai/mode): callers
+ * that must not spend pass skipModel, and the guard catches the rest.
  */
 
 /** Hard ceiling on one model call; the budget reservation TTL is 15 minutes. */
@@ -35,10 +39,21 @@ export type AnalyzeContentInput = {
   skipModel?: boolean;
 };
 
+export type AnalyzeUsage = {
+  input_tokens: number;
+  output_tokens: number;
+  /** Input tokens served from the prompt cache (part of input_tokens). */
+  cache_read_tokens: number;
+  /** Input tokens written to the prompt cache (part of input_tokens). */
+  cache_write_tokens: number;
+  cost_usd: number;
+  model: string;
+};
+
 export type AnalyzeContentResult = {
   findings: ContentFinding[];
   hidden_text: HiddenTextCandidate[];
-  usage: { input_tokens: number; output_tokens: number; cost_usd: number; model: string };
+  usage: AnalyzeUsage;
   prompt_hash: string;
   /** Findings produced before the model ran (offer checks). */
   deterministic_count: number;
@@ -143,24 +158,31 @@ export async function analyzeContent(input: AnalyzeContentInput): Promise<Analyz
       ...base,
       findings: mergeFindings([...deterministic, ...hiddenTextFindings(hidden, rules)], [], rules),
       hidden_text: hidden,
-      usage: { input_tokens: 0, output_tokens: 0, cost_usd: 0, model: MODELS.check },
+      usage: { input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_write_tokens: 0, cost_usd: 0, model: "none" },
       model_called: false,
     };
   }
 
-  const system = buildCheckSystemPrompt({
-    rules,
-    offers,
-    product: input.product,
+  assertModelCallsAllowed("ad check");
+  const model = MODELS.check;
+
+  // Constant per product + rules + terms, so the provider can cache it; the ad itself stays outside.
+  const system = buildCheckSystemPrompt({ rules, offers, product: input.product });
+  const prompt = buildCheckUserPrompt({
+    text,
+    transcribed: input.transcribed,
     channel: input.channel,
     format: input.format,
     alreadyFlagged: deterministic,
   });
-  const prompt = buildCheckUserPrompt({ text, transcribed: input.transcribed });
 
   const result = await generateText({
-    model: MODELS.check,
-    system,
+    model,
+    instructions: {
+      role: "system",
+      content: system,
+      providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
+    },
     prompt,
     output: Output.object({
       name: "ad_check",
@@ -174,6 +196,8 @@ export async function analyzeContent(input: AnalyzeContentInput): Promise<Analyz
 
   const inputTokens = result.usage.inputTokens ?? 0;
   const outputTokens = result.usage.outputTokens ?? 0;
+  const cacheRead = result.usage.inputTokenDetails?.cacheReadTokens ?? 0;
+  const cacheWrite = result.usage.inputTokenDetails?.cacheWriteTokens ?? 0;
   const output = result.output;
 
   const modelFindings: ContentFinding[] = output.findings.map((f) =>
@@ -209,8 +233,10 @@ export async function analyzeContent(input: AnalyzeContentInput): Promise<Analyz
     usage: {
       input_tokens: inputTokens,
       output_tokens: outputTokens,
-      cost_usd: costUsd(MODELS.check, inputTokens, outputTokens),
-      model: MODELS.check,
+      cache_read_tokens: cacheRead,
+      cache_write_tokens: cacheWrite,
+      cost_usd: costUsd(model, inputTokens, outputTokens, { read: cacheRead, write: cacheWrite }),
+      model,
     },
     model_called: true,
   };

@@ -12,33 +12,95 @@ import type { Database } from "@/lib/supabase/types";
  * argument so they stay importable from scripts.
  */
 
+/** The cheapest capable model: the default for every call (docs/ai-policy.md). */
+export const DEFAULT_CHECK_MODEL = "anthropic/claude-haiku-5.5";
+export const CHEAP_MODEL = "anthropic/claude-haiku-5.5";
+
+let warnedCheckModel: string | null = null;
+
+/**
+ * The check model: AI_CHECK_MODEL when set (any gateway id), else Haiku.
+ * Opus ids are refused (policy: never Opus) and fall back to the default.
+ */
+export function resolveCheckModel(): string {
+  const raw = process.env.AI_CHECK_MODEL?.trim();
+  if (!raw) return DEFAULT_CHECK_MODEL;
+  if (/opus/i.test(raw)) {
+    if (warnedCheckModel !== raw) {
+      warnedCheckModel = raw;
+      console.warn(`[ai/budget] AI_CHECK_MODEL="${raw}" refused (Opus is never used); using ${DEFAULT_CHECK_MODEL}.`);
+    }
+    return DEFAULT_CHECK_MODEL;
+  }
+  return raw;
+}
+
+/**
+ * Model ids as gateway strings. `check` is read from the environment on
+ * every access so scripts and tests can change AI_CHECK_MODEL late.
+ */
 export const MODELS = {
   /** Full check of an ad: structured output, quotes, suggestions. */
-  check: "anthropic/claude-sonnet-5.5",
-  /** Classification, chat, transcription, extraction. */
-  cheap: "anthropic/claude-haiku-5.5",
+  get check(): string {
+    return resolveCheckModel();
+  },
+  /** Classification, chat, transcription, extraction: always Haiku. */
+  cheap: CHEAP_MODEL,
 } as const;
 
-export type ModelId = (typeof MODELS)[keyof typeof MODELS] | (string & {});
+export type ModelId = string;
 
-/** USD per 1M tokens (Vercel AI Gateway list prices, checked 2026-11-06). */
-export const PRICES_PER_MTOK: Record<string, { input: number; output: number }> = {
-  "anthropic/claude-sonnet-5.5": { input: 2, output: 10 },
-  "anthropic/claude-haiku-5.5": { input: 0.1, output: 0.5 },
+export type ModelPrice = {
+  /** USD per 1M input tokens. */
+  input: number;
+  /** USD per 1M output tokens. */
+  output: number;
+  /** USD per 1M cached input tokens read (Anthropic: 10% of input). */
+  cacheRead: number;
+  /** USD per 1M cached input tokens written (Anthropic 5-minute cache: 125% of input). */
+  cacheWrite: number;
 };
 
-const FALLBACK_PRICE = { input: 10, output: 50 };
+function anthropicPrice(input: number, output: number): ModelPrice {
+  return { input, output, cacheRead: input * 0.1, cacheWrite: input * 1.25 };
+}
+
+/** USD per 1M tokens (Vercel AI Gateway list prices, checked 2026-11-07). */
+export const PRICES_PER_MTOK: Record<string, ModelPrice> = {
+  "anthropic/claude-haiku-5.5": anthropicPrice(0.1, 0.5),
+  "anthropic/claude-sonnet-5.5": anthropicPrice(2, 10),
+  "anthropic/claude-haiku-4.5": anthropicPrice(1, 5),
+  "anthropic/claude-sonnet-4.5": anthropicPrice(3, 15),
+  "anthropic/claude-sonnet-4": anthropicPrice(3, 15),
+};
+
+/** Unknown ids are priced like Sonnet so estimates and reservations stay conservative. */
+export const FALLBACK_PRICE: ModelPrice = PRICES_PER_MTOK["anthropic/claude-sonnet-5.5"];
 
 export type BudgetPurpose = "classification" | "analysis" | "suggestion" | "change_request_draft" | "chat";
 
-export function priceFor(model: string): { input: number; output: number } {
-  return PRICES_PER_MTOK[model] ?? FALLBACK_PRICE;
+export function priceFor(model: string): ModelPrice {
+  return PRICES_PER_MTOK[model.trim()] ?? FALLBACK_PRICE;
 }
 
-/** Real cost from token usage, rounded to 6 decimals (numeric(10,6) in the DB). */
-export function costUsd(model: string, inputTokens: number, outputTokens: number): number {
+export type CacheUsage = {
+  /** Input tokens served from the prompt cache (a subset of inputTokens). */
+  read?: number;
+  /** Input tokens written to the prompt cache (a subset of inputTokens). */
+  write?: number;
+};
+
+/**
+ * Real cost from token usage, rounded to 6 decimals (numeric(10,6) in the
+ * DB). `inputTokens` is the total; cached reads and writes inside it are
+ * priced at their own rates when given.
+ */
+export function costUsd(model: string, inputTokens: number, outputTokens: number, cache: CacheUsage = {}): number {
   const p = priceFor(model);
-  const usd = (inputTokens / 1_000_000) * p.input + (outputTokens / 1_000_000) * p.output;
+  const read = Math.max(0, Math.min(cache.read ?? 0, inputTokens));
+  const write = Math.max(0, Math.min(cache.write ?? 0, inputTokens - read));
+  const plain = Math.max(0, inputTokens - read - write);
+  const usd = (plain * p.input + read * p.cacheRead + write * p.cacheWrite + outputTokens * p.output) / 1_000_000;
   return Math.round(usd * 1e6) / 1e6;
 }
 

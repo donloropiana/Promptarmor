@@ -1,6 +1,6 @@
 "use client";
 
-import { MessageCircleQuestion, Send } from "lucide-react";
+import { CircleOff, MessageCircleQuestion, Send } from "lucide-react";
 import { useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -54,8 +54,9 @@ export function AskBox({ versionId, versionNo }: { versionId: string; versionNo:
         </p>
       )}
       {error && (
-        <p role="alert" className="mb-2 text-sm text-destructive">
-          {error}
+        <p role="alert" className="mb-2 flex items-start gap-2 rounded-lg border px-2.5 py-2 text-sm">
+          <CircleOff aria-hidden className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+          <span className="min-w-0 break-words">{error}</span>
         </p>
       )}
       <form

@@ -219,6 +219,22 @@ export function resolveOfferRuleCode(rules: RuleInput[], topic: Topic, product?:
   return best && best.score >= 4 ? best.code : OFFER_RULE_FALLBACK;
 }
 
+const ALL_TOPICS: Topic[] = ["apr", "fee", "intro", "amount", "term"];
+
+/**
+ * Rule codes the deterministic offer checks can evaluate for a product (the
+ * ones they would cite). A run that made no model call counts only these as
+ * checked, plus the hidden-text rule.
+ */
+export function deterministicOfferRuleCodes(rules: RuleInput[], product?: Product): string[] {
+  const codes = new Set<string>();
+  for (const topic of ALL_TOPICS) {
+    const code = resolveOfferRuleCode(rules, topic, product);
+    if (rules.some((r) => r.code.trim().toUpperCase() === code.toUpperCase())) codes.add(code.toUpperCase());
+  }
+  return Array.from(codes);
+}
+
 // ---------------------------------------------------------------------------
 // Checks
 // ---------------------------------------------------------------------------

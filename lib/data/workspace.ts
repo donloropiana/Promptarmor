@@ -311,8 +311,17 @@ const BELL_KINDS = [
   "change_request.created",
   "version.created",
   "analysis.completed",
+  "analysis.manual_review",
   "member.joined",
+  "member.removed",
+  "member.left",
+  "member.role_changed",
   "offer.changed",
+  "offer.added",
+  "rule.edited",
+  "rule.added",
+  "rule.enabled",
+  "rule.disabled",
 ] as const;
 
 const DECISION_WORDS: Record<string, string> = {
@@ -358,8 +367,10 @@ export const getRecentEvents = cache(async (profileId: string, limit = 10): Prom
     if (r.actor_id) userIds.add(r.actor_id);
     if (r.asset_id) assetIds.add(r.asset_id);
     const d = r.data as Record<string, unknown> | null;
-    const joined = str(d?.user_id);
-    if (r.kind === "member.joined" && joined) userIds.add(joined);
+    const subject = str(d?.user_id);
+    if (r.kind.startsWith("member.") && subject) userIds.add(subject);
+    const by = str(d?.by);
+    if (by) userIds.add(by);
   }
   const names = new Map<string, string>();
   if (userIds.size > 0) {
@@ -424,9 +435,38 @@ export const getRecentEvents = cache(async (profileId: string, limit = 10): Prom
         }
         break;
       }
+      case "analysis.manual_review": {
+        const reason = str(d.reason);
+        text =
+          reason === "hidden_text"
+            ? `${ad(r.asset_id)} contains hidden text aimed at the AI. It needs a person's review.`
+            : reason === "declined_budget"
+              ? `${ad(r.asset_id)} was not AI-checked (the daily AI cap is reached). It needs a manual review.`
+              : `The AI check on ${ad(r.asset_id)} could not finish. It needs a manual review.`;
+        break;
+      }
       case "member.joined": {
         const joined = str(d.user_id);
         text = `${joined ? who(joined) : "A new member"} joined the workspace.`;
+        href = "/settings/members";
+        break;
+      }
+      case "member.removed": {
+        const removed = str(d.user_id);
+        const by = str(d.by) ?? r.actor_id;
+        text = `${who(by)} removed ${removed ? who(removed) : "a member"} from the workspace.`;
+        href = "/settings/members";
+        break;
+      }
+      case "member.left": {
+        text = `${who(str(d.user_id) ?? r.actor_id)} left the workspace.`;
+        href = "/settings/members";
+        break;
+      }
+      case "member.role_changed": {
+        const subject = str(d.user_id);
+        const to = str(d.to);
+        text = `${who(subject)} is now ${to === "owner" ? "an owner" : "a member"}.`;
         href = "/settings/members";
         break;
       }
@@ -437,6 +477,31 @@ export const getRecentEvents = cache(async (profileId: string, limit = 10): Prom
           n === 0 ? "no approved ads were affected" : `${n} approved ${n === 1 ? "ad went" : "ads went"} back to Needs review`
         }.`;
         href = "/rules?tab=products";
+        break;
+      }
+      case "offer.added": {
+        const code = str(d.offer_code);
+        const name = str(d.offer_name);
+        text = `${who(r.actor_id)} added product ${code ?? ""}${name ? ` (${name})` : ""}. New checks use its terms.`;
+        href = "/rules?tab=products";
+        break;
+      }
+      case "rule.edited": {
+        const code = str(d.code);
+        const v = num(d.version_no);
+        text = `${who(r.actor_id)} edited rule ${code ?? ""}${v ? ` (now V${v})` : ""}. New checks use the new version.`;
+        href = "/rules";
+        break;
+      }
+      case "rule.added": {
+        text = `${who(r.actor_id)} added rule ${str(d.code) ?? ""}. It is on for new checks.`;
+        href = "/rules";
+        break;
+      }
+      case "rule.enabled":
+      case "rule.disabled": {
+        text = `${who(r.actor_id)} turned rule ${str(d.code) ?? ""} ${r.kind === "rule.enabled" ? "on" : "off"}.`;
+        href = "/rules";
         break;
       }
       default:

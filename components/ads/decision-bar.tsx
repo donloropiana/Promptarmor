@@ -63,9 +63,12 @@ export function DecisionBar({
   const versionNo = detail.latest.versionNo;
   const set = (patch: Partial<DecisionDialogs>) => onDialogs({ ...NO_DIALOGS, ...patch });
 
-  const afterDecision = (label: string, result: DecideResult) => {
+  const afterDecision = (label: string, result: DecideResult, opts: { advance?: boolean } = {}) => {
     cancelAdvance.current = false;
     const next = result.nextAdId;
+    // Request changes keeps you here: the ad now waits for its revision and
+    // the page shows that state. Approvals and rejections move on.
+    const advance = opts.advance ?? true;
     const id = toast.custom(
       (t) => (
         <div
@@ -80,7 +83,7 @@ export function DecisionBar({
           <Check aria-hidden className="size-4 shrink-0" />
           <div className="min-w-0 flex-1">
             <div className="font-medium">{label}</div>
-            <div className="text-xs text-muted-foreground">{next ? "Opening the next ad… hover to stay here." : "Nothing else needs review."}</div>
+            <div className="text-xs text-muted-foreground">{next ? (advance ? "Opening the next ad… hover to stay here." : "This ad now waits for a revision.") : "Nothing else needs review."}</div>
           </div>
           {next ? (
             <Button
@@ -110,7 +113,7 @@ export function DecisionBar({
       ),
       { duration: 6000 },
     );
-    if (next) {
+    if (next && advance) {
       setTimeout(() => {
         if (cancelAdvance.current) return;
         toast.dismiss(id);
@@ -120,7 +123,7 @@ export function DecisionBar({
   };
 
   return (
-    <div className="sticky bottom-0 z-10 -mx-4 mt-3 border-t bg-background/95 px-4 py-2.5 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:mx-0 md:rounded-xl md:border md:px-3">
+    <div data-decision-bar className="sticky bottom-0 z-10 -mx-4 mt-3 border-t bg-background/95 px-4 py-2.5 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:mx-0 md:rounded-xl md:border md:px-3">
       <div className="flex items-center gap-2">
         {approved ? (
           <div className="min-w-0 flex-1 text-sm">
@@ -213,10 +216,13 @@ function ApproveForm({ detail, userId, onClose, onDone }: { detail: AdDetail; us
   const [error, setError] = useState<string | null>(null);
   const [attested, setAttested] = useState(false);
   const [rationale, setRationale] = useState("");
+  // Only decision-grade issues (reviewer-added, or from a complete check) can
+  // be accepted as exceptions; the database ignores the rest.
   const needsException = useMemo(
-    () => detail.findings.filter((f) => (f.severity === "critical" || f.severity === "major") && (f.open || f.disposition?.disposition === "accepted_exception")),
+    () => detail.findings.filter((f) => f.decisionGrade && (f.severity === "critical" || f.severity === "major") && (f.open || f.disposition?.disposition === "accepted_exception")),
     [detail.findings],
   );
+  const stillOpenUnscreened = useMemo(() => detail.findings.filter((f) => !f.decisionGrade && f.open), [detail.findings]);
   const [entries, setEntries] = useState<Record<string, { reason: string; text: string }>>(() =>
     Object.fromEntries(
       needsException.map((f) => [
@@ -230,7 +236,7 @@ function ApproveForm({ detail, userId, onClose, onDone }: { detail: AdDetail; us
   );
 
   const isAuthor = detail.latest.authorId === userId;
-  const noCompleteRun = !detail.runs.some((r) => r.versionId === detail.latest.id && r.status === "complete");
+  const noCompleteRun = !detail.aiScreened;
   const withExceptions = needsException.length > 0;
   const selfBlocked = withExceptions && isAuthor && detail.memberCount > 1;
   const rationaleMin = noCompleteRun ? 40 : isAuthor ? 20 : 0;
@@ -249,7 +255,9 @@ function ApproveForm({ detail, userId, onClose, onDone }: { detail: AdDetail; us
         <SheetDescription id="approve-desc">
           {withExceptions
             ? `${needsException.length} ${needsException.length === 1 ? "issue is" : "issues are"} still open. Each needs a written reason; together they become the recorded exceptions.`
-            : "No Critical or Major issues are open. This records the exact version you have in front of you."}
+            : noCompleteRun
+              ? "The AI check did not run for this version, so this is a manual approval. It records the exact version you have in front of you."
+              : "No Critical or Major issues are open. This records the exact version you have in front of you."}
         </SheetDescription>
       </SheetHeader>
       <form
@@ -320,10 +328,28 @@ function ApproveForm({ detail, userId, onClose, onDone }: { detail: AdDetail; us
             </p>
           )}
 
+          {stillOpenUnscreened.length > 0 && (
+            <div className="rounded-lg border p-3">
+              <div className="text-sm font-medium">
+                {stillOpenUnscreened.length} open issue{stillOpenUnscreened.length === 1 ? "" : "s"} from the product-terms check
+              </div>
+              <p className="mt-0.5 text-xs text-muted-foreground">Approving leaves {stillOpenUnscreened.length === 1 ? "it" : "them"} as written. Say why in the rationale, or mark each one Not a problem first.</p>
+              <ul className="mt-2 space-y-1">
+                {stillOpenUnscreened.map((f) => (
+                  <li key={f.id} className="flex flex-wrap items-center gap-x-2 text-sm">
+                    <SeverityWord severity={f.severity} />
+                    <span className="min-w-0">{issueTitle(f)}</span>
+                    {f.quote && <q className="text-muted-foreground [quotes:'“'_'”']">{f.quote}</q>}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           <div className="grid gap-1.5">
             <Label htmlFor="approve-rationale">Rationale{rationaleMin ? ` (required, at least ${rationaleMin} characters)` : " (optional)"}</Label>
             {noCompleteRun && (
-              <p className="text-xs text-muted-foreground">The AI check did not complete for this version, so this is a manual approval and is recorded as &quot;Not AI-screened&quot;.</p>
+              <p className="text-xs text-muted-foreground">The AI check did not run for this version, so this is a manual approval and is recorded as &quot;Not AI-screened&quot;.</p>
             )}
             {isAuthor && !noCompleteRun && <p className="text-xs text-muted-foreground">You wrote this version, so a short rationale is required.</p>}
             <Textarea id="approve-rationale" value={rationale} onChange={(e) => setRationale(e.target.value)} className="min-h-16" placeholder="Anything the audit record should say." />
@@ -390,7 +416,7 @@ function buildNote(detail: AdDetail, open: AdFinding[]): string {
   return lines.join("\n");
 }
 
-function RequestChangesForm({ detail, onClose, onDone }: { detail: AdDetail; onClose: () => void; onDone: (label: string, r: DecideResult) => void }) {
+function RequestChangesForm({ detail, onClose, onDone }: { detail: AdDetail; onClose: () => void; onDone: (label: string, r: DecideResult, opts?: { advance?: boolean }) => void }) {
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const openIssues = useMemo(() => detail.findings.filter((f) => f.open), [detail.findings]);
@@ -441,7 +467,7 @@ function RequestChangesForm({ detail, onClose, onDone }: { detail: AdDetail; onC
               return;
             }
             onClose();
-            onDone(`Changes requested on V${detail.latest.versionNo}`, res.data);
+            onDone(`Changes requested on V${detail.latest.versionNo}`, res.data, { advance: false });
           });
         }}
       >

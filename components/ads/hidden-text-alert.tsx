@@ -9,7 +9,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { acknowledgeAlert } from "@/lib/actions/ads";
 import type { AdAlert } from "@/lib/data/ads";
 
-import { formatDateTime } from "./format";
+import { LocalDateTime } from "./local-time";
 
 /**
  * Pinned alert for hidden or instruction-like text. The excerpt is shown as
@@ -45,7 +45,7 @@ export function HiddenTextAlert({ alerts, issueCount }: { alerts: AdAlert[]; iss
                   {a.location && <span>· {a.location}</span>}
                   {a.acknowledgedAt && (
                     <span>
-                      · acknowledged by {a.acknowledgedBy ?? "a member"} {formatDateTime(a.acknowledgedAt)}
+                      · acknowledged by {a.acknowledgedBy ?? "a member"} <LocalDateTime iso={a.acknowledgedAt} />
                     </span>
                   )}
                 </div>
