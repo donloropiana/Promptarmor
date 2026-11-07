@@ -1,0 +1,92 @@
+# Critique of the design brief
+
+## 1. Gaps and errors, each with a fix
+
+### Against the 16 user stories
+
+| # | Story | Gap or error | Fix |
+|---|---|---|---|
+| S8 | Contextual AI chat that never approves | **The brief removes it.** §5.7 says "No general chat in this build", so a required story is dropped. | Build "Ask about this asset" in the workbench right pane. Scope it to one version, its run, the rule and offer snapshot, and its findings. Plain-text output only, no tools, and it cannot write state. Each message is metered against the budget. Add a canned guardrail: if asked "should I approve / approve this", it replies that it cannot approve and lists the open findings. Put it in the mockup and the demo (beat 5 or 10). |
+| S11 | Reuse analyses for near-identical creative, with traceability | Not designed. The only reuse is dismissals carrying forward by span hash (§4.4). Variant families are deferred to v2, and "reviewed under A-090" is just free text a reviewer typed. | Add a normalized-text hash per asset and per section (`analysis_cache` keyed on section hash, rule-set version and offer version). Findings for unchanged sections are copied with the chip "Reused from R-5480 (A-090 V3) · $0" and a link to the source run. Reuse is invalid if the rule or offer snapshot differs. Seed it on A-114 or A-107. |
+| S4 | Dedupe vs real modification | sha256 only catches byte-identical files. A re-exported PDF has new bytes (metadata timestamps), so it looks like a new asset. Google Docs have neither `md5Checksum` nor `headRevisionId`; the Drive API says both apply only to "files with binary content" (https://developers.google.com/workspace/drive/api/reference/rest/v3/files). There is no stable source identity. | Add `source_key` (provider + Drive fileId / Gmail threadId + attachment name / Sheet row id), separate from `content_sha256` and `normalized_text_hash`. Same source_key with changed text means new version. Different source_key with the same hash means duplicate. For Google Docs, export to text or PDF and hash that. Triage needs a 4th action, **"New version of A-xxx"**, with a text-overlap suggestion. |
+| S2 | Visible initial and incremental sync | Card states exist, but there is no per-run history, so incremental sync is not actually visible. | Add a Sources detail drawer with a sync log, e.g. "11/06 09:02 incremental: +2 new, 1 modified → A-107 V2, 3 skipped (not marketing), 0 errors", and backfill progress (12/30). |
+| S3 | Irrelevant / uncertain | Decline cannot be undone. Classification cost against the budget is not mentioned. | Add a Declined tab with Restore. A deterministic pre-classifier (no offer terms, CTA or product name) runs before any LLM call. |
+| S5 | Marketer preflight | It is unclear whether preflight creates a queue item and who pays for it. | Preflight produces a draft (V0) that the reviewer does not see. "Submit for review" promotes it. Drafts count toward the budget and are rate-limited per profile. |
+| S6 | Exceptions-first queue with **explained** risk | The queue shows severity and count but not *why*. | Add a "Top issue" column with a one-line reason (e.g. "5.99% APR not offered (floor 8.99%)"). Define the sort precisely: security alert > Critical > Major > due date > age. Define the "Blocked by Critical" predicate (it is ambiguous; see §3). |
+| S10 | Resolved / remaining / new | The A-103 demo shows everything resolved, so "remaining" is never shown. | Add a summary header to Compare: "3 resolved · 1 remaining · 1 new". Seed V2 so one item stays present. |
+| S1 | Profile isolation | There is no "Create profile" flow, and isolation is never demonstrated. | Add "New profile" to the switcher. Demo: Hannah is not a member of Northwind, so a URL to a Northwind asset returns 404, not 403. Storage paths are `profile_id/...` with storage RLS. `connections.profile_id` is checked on every webhook. |
+| S13 | Reconstruct history | Append-only is asserted but not enforced, and there is no "as of" view. | Revoke UPDATE/DELETE on `events`/`decisions`/`asset_versions` for all roles and add a trigger that blocks them. Add an asset History tab with "View as at decision time". |
+| S14 | Bounded spend with logs | Is $10/day global or per profile? If global, one tenant (or an evaluator spamming paste) can starve the others. Concurrent runs can overshoot the cap. | Use an atomic pre-call reservation in Postgres (`UPDATE … SET reserved = reserved + est WHERE used + reserved + est <= cap RETURNING`), then settle to the actual cost. Have a per-profile sub-cap (e.g. $3) inside the $10 global cap, and show both. |
+| S15 | Evaluator from scratch | It depends on the domain for email sign-in. "Load sample assets" could burn budget. | The evaluator path is Google or password sign-in, then create a profile, then paste, then preflight. Sample assets load with **pre-computed** runs labelled "seeded run, $0". |
+| S16 | Hostile creative | (a) The AI-drafted change-request email **is** an outbound path, so the claim of "no outbound path" is wrong. Injected text could push a phishing URL into the draft. (b) Injection surfaces are under-listed. (c) The keyword "approve" will false-positive on real copy ("You're approved", "guaranteed approval"). | (a) Draft the change request only from structured accepted findings, never raw creative. Strip or neutralize URLs. Mark the AI text in the composer. (b) Also scan filenames, email subject and sender name, Sheet cells, OCR'd image text, submitter "addressed" notes, and inbound replies. (c) Use two tiers: hidden or invisible text gives a Security alert; visible instruction-like text aimed at a model gives a "Possible injection" warning. Match "return status", "ignore previous", "AI reviewer", not the bare word "approve". |
+
+### Corner cases
+
+| Case | Status | Fix |
+|---|---|---|
+| Obscured disclosures | Partial. A-102 covers a 6px footnote via OCR estimate only. | Add a deterministic computed-contrast and font-size check for HTML, using the same pass as the injection scan. The brief already detects white-on-white for injection; reuse it to flag *legit disclosures* that are low-contrast. The finding reads "Disclosure present but may not be clear and conspicuous". |
+| APR not offered | Covered (A-101, A-113). | — |
+| Same attachment in two **emails** | Only the Gmail+Drive case is shown. | Seed two Gmail messages carrying the same PDF and show "Seen in 2 messages". |
+| **Multiple creatives in one email** | **Missing.** | Each intake item expands to N candidates (each attachment plus the body copy), with signature logos and inline images excluded by size and Content-ID heuristics. Triage action: **Split → N assets** (optionally one variant family). Seed I-207: "Brightline: Q4 display set" with a 300×250, a 728×90, a logo and body copy. |
+| **Drive doc changed after approval** | **Not designed.** The status model is per asset, so a V2 sync silently overwrites "Approved V1" with "Needs review" and hides that V1 is what's live. | Split state into `approved_version_id` (the live pointer) and `latest_version_status`. Show the banner "Approved V1 · Source changed 11/06 → V2 unapproved". Add a dashboard tile "Changed after approval" and notify the approver. Demo it on A-106. |
+| Fix one, add another | Weak. The new A-103 finding is a Minor "Uncertain". | Make V2 introduce a substantive new issue, e.g. "$0 balance transfer fee" when the catalog says 3%, so it is New Critical, not Minor. |
+| Missing product/channel/geo/audience | Covered for upload. **Missing for connector items**, which arrive without metadata. Geo has no coverage chip. | AI or rules infer metadata as "Inferred: Personal loan · confirm" chips. Accept is blocked until product and channel are confirmed. Add a coverage chip "State law: not covered". CP-META-01 currently cites 1002.12(b)(7) for *all* assets; that section covers prescreened solicitations only, so scope the citation to prescreen and use a generic "metadata required for review" rule otherwise. |
+| Unsupported file / extraction failure | Only .pptx and a generic "Could not analyse" are covered. | Add explicit states: password-protected PDF, scanned PDF with no text layer (OCR n pages, est. $), partial extraction 3/5 pages, SVG (treat as unsupported or rasterize, since SVG can carry script), zip, video. All of them map to **Needs manual review** and never to "No issues flagged". Seed one (A-115). |
+| **Gmail history cursor expiry** | **Absent.** Google: `startHistoryId` outside the range gives "HTTP 404 … must perform a full sync"; records are "typically available for at least one week" but "might be significantly shorter" (https://developers.google.com/workspace/gmail/api/guides/sync). | Card state "Resyncing after gap", then a bounded re-scan of the label since the last success, deduped by Message-ID + sha. The sync log records "Cursor expired, full rescan: 0 new, 14 already imported". Whether Nango's `messages` sync handles the 404 itself is unverified (low confidence): its docs say only "initial backfill followed by history-based incremental updates" (https://nango.dev/docs/api-integrations/google-mail.md), so build the guard in the webhook consumer. The same applies to Drive `pageToken` and Graph delta tokens. |
+| OAuth revoked | The state exists. Consequences are missing. | Already-imported assets and versions stay intact, and in-flight fetches are marked "Source unavailable" with the original bytes kept. After reconnect, sync resumes from the last cursor (or a gap rescan). Email the owner. Add a state "Connection owner removed from profile". |
+| Injected instructions | Covered (A-109). | Add a visible-injection variant and an image-OCR variant (see S16). |
+
+### Internal contradictions and errors
+
+- **Self-approval is defined three ways.** §4.3 says self-approval is allowed with justification. §5.3.5 says the approver "cannot be the author", yet allowed in one-member profiles. §5.6 says only exceptions are blocked. Fix: plain self-approval is allowed with a "Self-approved" badge and a justification. Self-approval *with exceptions* is blocked unless the profile has one member.
+- **"Approve with exceptions" extends to Major and to unverified findings.** Max asked about open Criticals only. That's defensible, but say so explicitly. Also state that "Fix required" findings block every Approve variant; the reviewer must re-disposition them to "Accept as exception".
+- **The KPI says "median" but then "divided over decided assets"**, which is a mean. Fix: sum active seconds per asset across workbench, compare and composer, then take the median across decided assets. Triage time is a separate metric.
+- **Heartbeat cost.** A 15-second heartbeat through Vercel functions is about 240 invocations per reviewer-hour. Write directly to Supabase under RLS, or batch on `visibilitychange`/`sendBeacon`.
+- **Offer invalidation needs data the schema lacks.** "Approved versions that cite the affected terms" requires extracted claims. Add `version_claims` (type rate|apr|fee|term|amount, value, span, product). The deterministic pass fills it.
+- **A-105 F2 cites "CP-PL-01-equivalent for mortgage"**, which is not in the rule list. Add CP-MG-03 "Actually-available terms + rate needs APR (1026.24(a),(c))".
+- **A-103 V2 is "submitted via portal" by Hannah, who is a member.** Members should resubmit in-app. Use a Brightline asset for the portal beat.
+- **A-103 audit line is garbled:** "set F1, F3 and F4 to Fix required; F2 Fix required". Make it one list. Severity "Needs judgment (Major)" mixes two axes; keep severity and evidence type separate everywhere.
+- **Inbound forwarding address is open to the world.** Anyone can mail it, which means spam, injection and quota burn. Fix: a sender allowlist (members plus partner domains). Others go to Triage as "Unknown sender". Resend counts **every received email** toward the quota ("Each received email counts towards your transactional emails quota"; 100/day on Free, https://resend.com/pricing).
+- **Vercel Schedules on Hobby:** most frequent is every 15 minutes with a fixed 15-minute jitter, but there are only **5,000 runs per billing period per team** (https://vercel.com/docs/schedules/limits). One 15-minute backstop is about 2,900 runs a month, so only one such schedule fits. Legacy Cron on Hobby is once per day (https://vercel.com/docs/cron-jobs/usage-and-pricing). State this.
+- **Long preflight on Hobby functions.** Multi-page OCR plus an LLM call can exceed function duration. Run analysis asynchronously (Next `after()`, or a Supabase queue/Edge Function) and drive the staged-progress UI from `analysis_runs` rows.
+- **Untrusted rendering.** Sandboxed HTML needs an explicit CSP (`sandbox` without `allow-scripts`/`allow-same-origin`, `img-src` limited to the storage origin). Serve asset files from signed URLs with `Content-Disposition` set so they are not served inline from the app origin.
+- **"Never imply integrations not implemented" is violated by demo beat 1.** It shows Outlook "Needs admin approval", OneDrive "Delayed" and Sheets "Reconnect required" as live states. If only Drive and Gmail ship, those cards in the **real app** must read "Not available yet". The other states may appear in the mockup only, tagged "illustrative state".
+- **Nango claims to soften.** The managed Gmail app is documented for "development and production" and the security review is "not needed with the Nango-managed app" (https://nango.dev/docs/api-integrations/google-mail.md). Managed scopes are not listed on the docs page, so confirm in the dashboard. The pricing page's "10" lacks a label and the plan is "Hard-capped limits, reset monthly" (https://www.nango.dev/pricing); cap behaviour is unverified. The statement that Nango is "the only option" with all three properties is overclaimed. Say "best fit we found".
+- **Low-confidence claims to drop or soften for the interview:** "GitHub now lets admins turn on Copilot approvals", the GetGenAI→Inspack rebrand date, and the Reg B §1002.4(b) effective date 2026-07-21. None were re-verified here.
+
+## 2. Over-scoped for an 18-hour build
+
+Cut from the build, keeping mockup-only where it helps the story:
+- **Real Outlook, OneDrive, Sheets and Excel connectors**, the Microsoft admin-consent flow, and the Sheet column mapper. Ship Upload, Paste, CSV (fixed template) and Forwarding first, then Nango Drive, then Gmail.
+- **Blind-sample review.** Mockup only; the real app logs the metric as n/a.
+- **"Daniel is viewing" presence**, auto-advance setting, saved views, J/K beyond the queue and findings.
+- **Reply-to inbound threading** (`cr-<token>@reply`), and the 6-digit code before exception approval.
+- **The submitter portal with OTP.** Ship an email-bound, expiring, single-use token link. Add OTP only if time remains.
+- **Rule redline between any two versions, the Regulatory References tab, and starter-library cloning UI.** Seed cloned rules, show version history, and do a jsdiff against the previous version only.
+- **Withdraw approval, approval expiry (12 months), and retention dates.** Store the fields; build no UI.
+- **PDF audit packet.** Export JSON or CSV only.
+- **Image bounding-box anchors, multi-file package tabs, template vs populated variants, and side-by-side visual compare for images.** Use page-level anchors and OCR text.
+- **Full KPI set on the dashboard.** Show the headline KPI, first-pass rate, rounds, exceptions count and AI spend. Move the rest to Reports later.
+- **Partners as a full CRUD screen.** Store partner name and email on the asset.
+- **The mockup itself at 16 screens is heavy.** Timebox it to about 2 hours, prioritize screens 3, 4, 8, 9, 10, 12, 7 and 5, and stub the others.
+
+## 3. Mockup-spec omissions
+
+1. **AI chat panel** (S8) in the Workbench right pane, with canned Q&A, including the "Can you approve this?" refusal and an injection-aware answer on A-109.
+2. **Create profile** flow plus an isolation demo (a cross-profile URL gives "Not found").
+3. **Sources detail drawer** with sync-run log, backfill progress, plus "Resyncing after gap (Gmail history expired)", "Reconnect required → what's preserved", and "Connection owner removed".
+4. **Triage actions** "New version of A-xxx" and "Split into N assets", plus seed I-207 (multi-creative email) and two emails carrying one attachment. Add a Declined tab with Restore.
+5. **Reuse chip** on an asset ("Reused from R-5480 · $0") with a click-through to the source run.
+6. **Changed-after-approval** state on A-106: the approved-version pointer plus the newer unapproved version, its own dashboard tile, and an approver notification.
+7. **Extraction-failure asset** (A-115: password PDF or scanned PDF) routed to Needs manual review with coverage chips.
+8. **Inferred-metadata confirm** on connector items, and the "State law: not covered" chip.
+9. **"Edit copy" flow.** §9.3 has only "Apply suggestion". Add a per-section edit that creates V(n+1) with `reviewer_edit`, plus metadata edit with an audit event. This is Max's "edit all the documents".
+10. **Compare summary header** "resolved / remaining / new", with seeded V2 data that includes one remaining and one substantive new Critical.
+11. **Notification surface.** Specify where the exception-approval owner notice lands: a bell list or a sent-email log.
+12. **Change-request failure states:** Resend send failed or bounced, portal link expired or revoked, and a "Daily email quota reached" banner.
+13. **Budget detail:** a per-profile sub-cap plus a global meter, the state "Run declined: would exceed cap", and a per-run ledger row (model, tokens in/out, $, cached/reused).
+14. **History tab** with "as at decision" view, and the events table showing that rows cannot be edited.
+15. **Two-tier injection display:** a visible "Possible injection" warning distinct from a hidden-text "Security alert".
+16. **Accessibility:** severity and status use icon + text, not colour alone, and there is a `?` shortcut overlay.
+17. **Count reconciliation.** Tiles must equal the seeded data. "Needs my decision 7" matches A-101/104/105/106/107/110/114. "Blocked by Critical 5" matches no clear predicate: open Criticals exist on A-101, 102, 104, 105, 109, 110, 111. Define the predicate and fix the number. Fill or explain the missing A-112.
+18. **Illustrative-state tags.** Connector states not wired in the build (Outlook, OneDrive, Sheets) carry an "illustrative" tag in the mockup so the demo does not imply coverage.

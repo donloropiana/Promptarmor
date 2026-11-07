@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "supabase-promptarmor": {
+      "type": "http",
+      "url": "https://mcp.supabase.com/mcp?project_ref=dquwmmysasjvvgxnbhdl"
+    }
+  }
+}

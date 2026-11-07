@@ -1,0 +1,201 @@
+[
+ {
+  "issues": [
+   {
+    "severity": "major",
+    "where": "#queue, src/screens/dashboard-queue.js queue columns (~line 6490-6555 in dist; Asset/Top issue/Risk/Open/Version/Source/Submitter/Status/Due/Updated/Assignee + checkbox)",
+    "problem": "The Queue table has 12 columns. Estimated widths: Asset up to 420px plus padding, Top issue 180px min, a Status badge like 'Approved with exceptions V2' around 180px, a Due badge around 110px, Submitter around 170px, plus 6 shrink columns. That adds up to about 1150-1250px. At the required 1280px viewport the content area is about 996px (1280 minus the 236px sidebar and 48px of gutters), so the main working table almost certainly scrolls sideways inside .table-wrap and Status, Due and Assignee start off-screen.",
+    "fix": "Add an optional-column class and hide those columns below 1440px. In the column defs add cls/headerCls 'q-opt' to Version, Source and Updated. Add CSS `@media (max-width: 1439px) { .table .q-opt { display: none; } }`. Move the version to the Asset sub line instead (e.g. 'A-105 \u00b7 V2 \u00b7 Personal loan \u00b7 Email'). Also cap the Asset title with `.q-title.cell-title { max-width: 300px; }` at widths at or below 1440px."
+   },
+   {
+    "severity": "major",
+    "where": "#queue Asset cell, src/screens/dashboard-queue.js (asset render: tags appended inside .cell-sub); src/index.html:740 .cell-sub",
+    "problem": "The 'possible injection', 'reused' and 'you submitted' tags are appended to the end of .cell-sub, which uses white-space:nowrap, overflow:hidden, text-overflow:ellipsis and max-width 420px (240px at 860px and below). The sub line is already long ('A-105 \u00b7 Campaign \u00b7 Personal loan \u00b7 Email'), so the security-relevant 'possible injection' tag gets cut off by the ellipsis. Users never see it.",
+    "fix": "Render the tags on their own line outside .cell-sub: `... + '</span>' + (tags.length ? '<span class=\"row row-tight row-wrap\" style=\"margin-top:3px\">' + tags.join('') + '</span>' : '')`. Or put the tags before the metadata, so the ellipsis cuts the metadata and not the warning."
+   },
+   {
+    "severity": "major",
+    "where": "src/index.html:71,77,81 (light) and 178/184/188 + 259/265/269 (dark): --st-changes-requested, --st-approved-with-exceptions, --st-re-review-due; --sev-major",
+    "problem": "Three status hues are nearly the same color. In light mode they are Tailwind orange-700, amber-700 and yellow-700 (L 0.553-0.555, hue 38/49/66), on near-identical 50-level backgrounds. In dark mode amber-300 and yellow-300 (hue 84 vs 92) are effectively the same. --sev-major is byte-identical to --st-changes-requested. Icons and labels keep this from being color-only, but in a dense Queue, 'Changes requested', 'Approved with exceptions' and 'Re-review due' read as one color family, and a Major severity chip looks like a status.",
+    "fix": "Spread the hues apart and add a non-color cue. Light: keep changes-requested at oklch(0.553 0.195 38.4); exceptions oklch(0.555 0.163 49) with bg oklch(0.962 0.059 95.6) (a stronger amber-100 fill); re-review-due oklch(0.476 0.114 61.9) with bg oklch(0.987 0.026 102.2) and a dashed border via `.st-re-review-due { border-style: dashed; border-color: color-mix(in oklch, var(--c) 55%, transparent); }`. Dark: re-review-due oklch(0.905 0.182 98.1) with bg at /0.10, and exceptions bg at /0.24. Give `.sev-major` a 1px solid border at 45% of --c so severity chips differ in shape from the pill-shaped status badges."
+   },
+   {
+    "severity": "major",
+    "where": "src/index.html:981 .menu-item:hover, .menu-item:focus-visible",
+    "problem": "Menu items set outline:none and show keyboard focus only as background:var(--accent), which is oklch(0.97) on a white popover (about 1.06:1). Keyboard users can't see which item in the profile switcher, user menu or row menu has focus, which breaks the visible-focus-ring requirement.",
+    "fix": "Split the rule. Keep `.menu-item:hover { background: var(--accent); }` and add `.menu-item:focus-visible { background: var(--accent); outline: 2px solid var(--focus); outline-offset: -2px; }`."
+   },
+   {
+    "severity": "major",
+    "where": "#members, src/screens/admin.js:46 `@media (min-width: 1000px) { .adm-members-table .table-wrap { overflow: visible; } }`",
+    "problem": "From 1000px up, the members and invites tables lose their overflow container. At 1000-1180px the content column is only about 716-900px, and the justification/email/actions columns (.adm-just min-width 220px) can be wider than that. body has overflow-x:clip, so the overflow is cut off silently: the actions column (Send again / Revoke) gets clipped with no scrollbar. This breaks the 'wide tables in overflow-x containers' rule.",
+    "fix": "Delete the media rule. Menus are position:fixed, so they don't need overflow:visible. If it was there for CSS [data-tip] tooltips, switch those cells to title= or data-tip-pos=\"left\" instead."
+   },
+   {
+    "severity": "minor",
+    "where": "#asset-* at 1100px and below, src/index.html:840 .sticky-footer + src/screens/workbench.js:131-152 .wb-bar",
+    "problem": "When the workbench stacks (1100px and below), the sticky decision bar sits inside .view's gutter padding. Its background stops 16px short of each edge, so scrolled content shows through both sides. At about 400px the four decision buttons each become flex:1 1 auto full-width rows, and the bar can take 120-160px of a roughly 700px viewport.",
+    "fix": "In workbench CSS add `@media (max-width: 1100px) { .wb .sticky-footer { margin-left: calc(-1 * var(--gutter-l)); margin-right: calc(-1 * var(--gutter-r)); padding-left: var(--gutter-l); padding-right: var(--gutter-r); } }`. At 640px and below, lay the actions out as a 2-column grid: `.wb-bar-actions { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }`, with the primary Approve spanning both columns (`grid-column: 1 / -1`). Also hide .wb-bar-who's second line (#wb-bar-note) there."
+   },
+   {
+    "severity": "minor",
+    "where": "src/screens/workbench.js:52-53 (.creative .hidden-text, .wb-hidden-marker); src/index.html .hl tokens",
+    "problem": "Creatives always render on --creative-paper (white), but the hidden-text marker, the hidden-text chip and the evidence underline use themed tokens (--destructive, --sev-*, --hl). In dark mode those switch to light tints: --destructive becomes oklch(0.704 0.191 22), which is about 3:1 on white. The 'Hidden text' marker on the injection asset (the key security demo) looks washed out in dark mode.",
+    "fix": "Pin light values inside the creative scope: `.creative { --destructive: oklch(0.577 0.245 27.325); --sev-critical: oklch(0.577 0.245 27.3); --sev-major: oklch(0.553 0.195 38.4); --sev-minor: oklch(0.442 0.017 285.8); --hl: oklch(0.962 0.059 95.6); --hl-active: oklch(0.905 0.182 98.1); --st-security-alert: oklch(0.505 0.213 27.5); }` (light values only, so they stay readable on the white paper in both themes)."
+   },
+   {
+    "severity": "minor",
+    "where": "src/screens/admin.js:1122 and src/screens/workbench.js:823",
+    "problem": "Two dash asides remain in UI copy. 'This link has expired or was already used \u2014 send a new one' uses an em dash, and 'Evidence not found \u2013 verify' uses an en dash. Other '\u2014' uses are empty-value placeholders, which are fine.",
+    "fix": "Change them to 'This link expired or was already used. Send a new one.' and 'Evidence not found. Verify it in the asset.' (or 'Quote not found in this version')."
+   },
+   {
+    "severity": "minor",
+    "where": "src/index.html:550 .select background-image",
+    "problem": "The select chevron is a data-URI SVG with a literal stroke color (%23888888). It is the only literal color in the component CSS and doesn't follow the theme (too light on white, too dark in dark mode).",
+    "fix": "Replace it with a token-driven mask on a pseudo-element wrapper. Wrap selects in `.select-wrap { position: relative; }` and add `.select-wrap::after { content: ''; position: absolute; right: 9px; top: 50%; width: 14px; height: 14px; transform: translateY(-50%); background: var(--muted-foreground); -webkit-mask: url(\"data:image/svg+xml,...stroke='black'...\") center/contain no-repeat; mask: ...; pointer-events: none; }`. Or set the stroke to %23737373 and accept a neutral gray in both themes."
+   },
+   {
+    "severity": "minor",
+    "where": "src/index.html:432 .wordmark-mark",
+    "problem": "The wordmark tile uses --sidebar-primary, which is near-black in light mode but blue oklch(0.488 0.243 264) in dark mode, so the brand mark changes hue between themes. It is the only saturated chrome color in dark mode.",
+    "fix": "Use `background: var(--primary); color: var(--primary-foreground);` for .wordmark-mark. Keep --sidebar-primary defined as-is to mirror shadcn."
+   },
+   {
+    "severity": "minor",
+    "where": "src/screens/review-loop.js:25 .rl-collapse:focus-visible; src/index.html:539 .input/.select/.textarea:focus-visible",
+    "problem": "Focus styles are inconsistent. .rl-collapse uses var(--ring) (oklch 0.708, about 2.3:1 on white) instead of the global --focus. Inputs show focus only as a border in --ring plus a 35% ring shadow, which is faint in light mode.",
+    "fix": "Use `outline: 2px solid var(--focus)` in .rl-collapse. For fields, set `border-color: var(--focus)` and keep the soft shadow ring."
+   },
+   {
+    "severity": "minor",
+    "where": "src/index.html:838 .pane-footer (Compare rail footer, src/screens/review-loop.js ~666)",
+    "problem": ".pane-footer has no flex-wrap. In the 300-360px Recheck rail on #compare-* at 1101-1280px, the 'Verify each item, then decide. J K move \u00b7 V verify' text and the 'Decide on V2' button squeeze into one row, and the kbd chips get crushed.",
+    "fix": "Add `flex-wrap: wrap;` to .pane-footer, and give the hint span `flex: 1 1 180px`."
+   },
+   {
+    "severity": "minor",
+    "where": "src/screens/review-loop.js:36 .rl-group-title",
+    "problem": "This group heading is the only one in the UI using uppercase with letter-spacing. .pol-group-title, .wb-group-head, .sb-label and .menu-label are all sentence-case 11.5-12px/500-600, so the headings look inconsistent.",
+    "fix": "Remove `text-transform: uppercase; letter-spacing: 0.04em;` so it matches .wb-group-head."
+   },
+   {
+    "severity": "minor",
+    "where": "src/index.html:623 .due-ok",
+    "problem": "Every future due date renders as a green filled badge. The Queue fills with green pills, which dilutes the green that means Approved and adds color noise to a calm table.",
+    "fix": "Make the not-urgent state neutral: `.due-ok { --c: var(--muted-foreground); --c-bg: transparent; border-color: var(--border); }`. Keep amber for due within 24h and red for overdue."
+   },
+   {
+    "severity": "minor",
+    "where": "src/index.html:695 .tabs (scrollbar-width:none)",
+    "problem": "At about 400px the workbench tabs (Findings / Checklist / Ask / Versions / History) and Policies tabs scroll sideways with the scrollbar hidden, and nothing shows that more tabs exist off-screen.",
+    "fix": "Add an edge fade: `@media (max-width: 640px) { .tabs { mask-image: linear-gradient(to right, black calc(100% - 24px), transparent); } }`. Or allow wrapping with `.tabs { flex-wrap: wrap; }` at 640px and below."
+   },
+   {
+    "severity": "minor",
+    "where": "src/screens/workbench.js:728 callout 'As at \u2026'; mixed apostrophes across admin.js/review-loop.js/workbench.js",
+    "problem": "Copy consistency issues. 'As at' is British usage; the rest of the copy uses 'as of' ('Verified as of 2026-11-06'). Curly apostrophes ('You\u2019re a member', 'You can\u2019t save') sit next to straight ones ('Couldn\\'t', 'Can\\'t').",
+    "fix": "Change it to 'As of \u2026'. Normalize to one apostrophe style (curly \u2019 everywhere in UI strings)."
+   }
+  ],
+  "strengths": [
+   "Meets the artifact contract. index.html starts with <title>Compliance Workbench</title>, then the viewport-fit meta and the single Google Fonts link (Geist + Geist Mono with system fallbacks). There is no DOCTYPE, html, head or body tag. Only one external resource loads (the font stylesheet). There are no iframes, no CDN scripts and no download links, and no alert/confirm/prompt/print/window.open calls.",
+   "The tokens follow the spec exactly. The light shadcn radix-nova neutral values are on bare :root. The dark values appear twice, verbatim: under @media (prefers-color-scheme: dark) :root:not([data-theme=\"light\"]) and under :root[data-theme=\"dark\"], each setting color-scheme. body takes its background from var(--background). Status and severity tokens are complete, with dark variants.",
+   "The component CSS has no literal colors except the select chevron. The only hex values are ad-creative palettes in data.js, applied through a HEX-validated inline style to redrawn artwork. That is intentional and stays scoped to .creative.",
+   "Status, severity, evidence, result, recheck, disposition and due badges all go through one badgeHtml helper that always renders icon plus text. Status dots are always paired with a text label and aria-hidden.",
+   "Hash routing is clean. All routes are plain ASCII-hyphen names (#asset-A-105, #policies-references-ref-z-1026-16, and so on), with no '#/', '?', '=' or reserved names. App.go warns on invalid hashes.",
+   "Responsive structure is sound. The sidebar becomes an off-canvas drawer at 860px and below (scrim, aria-expanded, focus return). Split panes stack at 1100px and below. Every table goes through .table-wrap with overflow-x:auto. Gutters use max(16px, env(safe-area-inset-*)). The banner height adapts at 640px and below, and body uses overflow-x:clip, which does not break sticky chrome.",
+   "Accessibility basics are in place. There is a global 2px :focus-visible outline on a --focus token. prefers-reduced-motion is honored in CSS and in the JS smooth scroll. Forms use label/for and stable ids. A '?' shortcut dialog, sr-only captions on tables, and sr-only text for the em-dash placeholders are present.",
+   "localStorage is wrapped in lsGet/lsSet/lsDel try/catch helpers, and a 'Reset demo data' action with an in-page confirm dialog exists.",
+   "The visual language is consistently compact shadcn Nova. Base text is 13px Geist with tabular numbers and hairline borders, radii derive from --radius 0.625rem, layout spacing uses flex/grid gaps, and there are no gradients, emoji or hero sections.",
+   "The email-scope constraint holds. The only 'resend' strings are for sign-in links, codes and member invites, which the auth system sends."
+  ]
+ },
+ {
+  "issues": [
+   {
+    "severity": "major",
+    "where": "#asset-A-102, #asset-A-108 (image), #asset-A-105/A-110 (PDF): src/screens/workbench.js:619-623, 833, 1456, 1485; src/core.js:769 (newVersion)",
+    "problem": "Decision 7 says image and PDF layout are not editable (\"Text suggestion only\"). Image and PDF assets still show \"Edit copy\" on every OCR section and \"Apply suggestion\" on findings. Both create a real V(n+1). newVersion() also rewrites content.visual, so the redrawn ad now shows the new wording, as if the app had edited the image. The new version has a fresh sha and canDecide() lets it be approved. That leaves an approval record for a creative that was never produced: the submitter never made that file.",
+    "fix": "For content.format 'image' or 'pdf': (a) Hide \"Edit copy\" on OCR sections. Keep \"Apply suggestion\" only as \"Add to change request\" or \"Copy suggested text\", and create no version. (b) If a text draft must stay, never copy text into content.visual. Mark the version origin 'text_draft' and make canDecide() refuse approval with \"Text draft of an image: wait for the revised file from the submitter\". Keep the \"text suggestion only\" tag next to these controls."
+   },
+   {
+    "severity": "major",
+    "where": "Dashboard tiles and sidebar badge: src/screens/dashboard-queue.js:181-205 (PRESETS my-decision), 358-385 (workTiles), 399-420 (Next up); src/core.js:682-688 (navCounts)",
+    "problem": "Work counts don't reconcile across the chrome. In the seeded state the sidebar Queue badge shows 7 (needs-review + recheck-ready, including Hannah's own A-114). The \"Needs my decision\" tile shows 6. Next up shows 10. The Queue's default \"Needs review\" tab shows 10. Both the badge and the tile leave out Needs manual review and Re-review due. A-115 (password-protected PDF, needs a human decision, due Nov 7) is therefore in no work tile. A-109 appears only under Security alerts and A-113 only under Re-review due. The spec requires tile counts to match the data and each tile to deep-link to exactly what it counts.",
+    "fix": "Define one \"needs a decision\" predicate: status in needs-review, recheck-ready, needs-manual-review or re-review-due. Use it for navCounts().queue, the Needs my decision tile (minus your own submissions, stated in the tile title) and the Next up header count. Or give Next up its own clearly different label. Add a \"Needs manual review\" tile or preset so A-115 has a home. Check that the sidebar badge and the matching Queue tab show the same number."
+   },
+   {
+    "severity": "minor",
+    "where": "#intake-sources Microsoft card: src/data.js:275 (SMART) and 310-318 (src-outlook/onedrive/excel)",
+    "problem": "The seeded Microsoft state contradicts decision 3 (one click connects Outlook + OneDrive + Excel). Outlook shows Needs reconnect (connected by Daniel), while OneDrive and Excel show \"Not connected \u00b7 Added when you reconnect Microsoft\". One consent can't connect only Outlook. The Microsoft card's \"What we watch\" also reads \"across mail and Drive\" because data.js uses one Google-specific SMART string for every source.",
+    "fix": "Seed all three Microsoft services as needs-reconnect (same account, same lastSyncAt, same error) so the group behaves as one connection. Use a per-group smart-watch string in data.js, e.g. 'Smart watch: detect marketing submissions across mail and OneDrive (recommended)' for the Microsoft sources."
+   },
+   {
+    "severity": "minor",
+    "where": "Connect flow: src/screens/intake.js:1972-1990 (flowView 'intro'), 2181 (src-flow-next)",
+    "problem": "Decision 3 is click, then provider consent screens. The flow adds an in-app interstitial dialog (\"Continue to Google\") before the first consent screen, so connecting takes an extra confirm. That isn't one click per provider.",
+    "fix": "Have \"Connect Google\" / \"Connect Microsoft\" open the consent step directly (f.step = 'consent'). Move the \"What happens next / What we read\" copy onto the Sources card under the button, or into a small line above the first consent screen."
+   },
+   {
+    "severity": "minor",
+    "where": "Approve with exceptions dialog: src/screens/workbench.js:1766-1772 (rows filter); src/core.js:897-908",
+    "problem": "Decision 4 asks for a written justification per open Critical or Major finding. The dialog also pulls every undispositioned or Fix-required Minor finding into the exceptions list and makes each one meet the 40-character rule and pick a reason category. That goes beyond the decision and turns Minor items into recorded \"exceptions\" in the log and exports.",
+    "fix": "Limit the exception rows to severity critical or major. For Minors that still lack a disposition, show inline Not an issue / Accept buttons, or block with \"Disposition N Minor findings first\", without making them exceptions."
+   },
+   {
+    "severity": "minor",
+    "where": "Owner notification on exception approval: src/core.js:948-950; src/screens/workbench.js:1776-1777",
+    "problem": "\"Owner notified\" is a profile-wide in-app notification that every member sees, and it always says \"Owner review recommended\". When the approver is the only owner (Hannah in the seed), the owner is told to review their own decision.",
+    "fix": "Give notifications an optional audience (e.g. forUserIds = owner ids, excluding the approver) and filter visibleNotifications() by it. When the approver is the sole owner, word it \"Recorded: approved with N exceptions\" and drop \"Owner review recommended\"."
+   },
+   {
+    "severity": "minor",
+    "where": "Finding-count semantics: src/core.js:675 (isOpenFinding) vs src/data.js metrics.definitions.openFinding vs src/screens/dashboard-queue.js:122 (openList)",
+    "problem": "There are two definitions of \"open\". The metrics definition and the dashboard exclude accepted exceptions, but core and the workbench header include them. Approved A-108 shows \"1 open finding \u00b7 1 Major\" in the workbench while the queue risk column says none open. The Ask AI approve-refusal also lists accepted exceptions as open findings.",
+    "fix": "Make App.isOpenFinding exclude disposition 'accepted-exception' (keep a separate helper for \"live, not resolved\" where the exception dialog needs it). Show exceptions in the header as \"1 accepted exception\", not \"open\"."
+   },
+   {
+    "severity": "minor",
+    "where": "#dashboard AI budget card and budget banner: src/screens/dashboard-queue.js:333-341, 476-495; #profile-prefs: src/screens/admin.js:903",
+    "problem": "The dashboard budget meter ($0.0517 of $3.00, $0.46 of $10.00) is built from sample cost-ledger values but has no \"sample\" tag, unlike the KPI tiles. The reset time also contradicts itself: the dashboard says midnight UTC (6:00 PM Central), while Profile settings say \"Resets at midnight Central\".",
+    "fix": "Add ui.sample() to the AI budget card title (and to the Reports ledger totals row). Pick one reset rule (midnight UTC = 6:00 PM Central) and use it in admin.js:903 too."
+   },
+   {
+    "severity": "minor",
+    "where": "Seed data: src/data.js:286, 504, 989 (I-205) vs Compare A-103 (src/screens/review-loop.js:325, 590); src/data.js preflight events vs workbench run stamp",
+    "problem": "The data contradicts itself. I-205 and the Gmail sync log say A-103 V2 has \"81% text overlap with V1\", but Compare computes and shows 49%. Every seeded preflight event says \"finished against 17 rules\", but workbench headers say \"Checked against 11 rules\" (personal loan, cards) or 13 (mortgage). A-111 (a personal-loan SMS) says \"Checking against 17 rules\".",
+    "fix": "Change the I-205 reason, the sync-log line and the A-103 event to the overlap Compare computes (about 49%), or adjust V2 text. Generate the \"N rules\" count from the applicable checklist length (11/13) in the events and the A-111 subLabel instead of hardcoding 17."
+   },
+   {
+    "severity": "minor",
+    "where": "#invite: src/screens/admin.js:1290-1312",
+    "problem": "The default invite preview uses a made-up invite, d.kim@clearpath.example. It uses a different domain than every other ClearPath address (clearpathfinancial.example), doesn't appear in the Members > Invites list, and is easy to confuse with the existing member Daniel Kim.",
+    "fix": "Default #invite to the seeded pending invite (inv-2, marcus.lee@clearpathfinancial.example, expires Nov 12). Use clearpathfinancial.example for the mismatch variant's other address."
+   },
+   {
+    "severity": "minor",
+    "where": "Preflight missing-audience finding: src/screens/intake.js:622-624; A-111 seed src/data.js:805-845",
+    "problem": "The critique says to scope the prescreen citation to prescreened offers and use a generic \"metadata required for review\" rule otherwise. Instead, any SMS or direct-mail paste without an audience gets a finding citing LIB-PRESCREEN-01 (12 CFR 1022.54 prescreen opt-out notice). The seeded A-111 run (demo beat 3) has no \"Missing information: audience\" finding, so the inferred/missing-metadata story isn't shown on the seeded SMS.",
+    "fix": "Add a profile rule CP-META-01 \"Required intake metadata\" (internal policy, no CFR citation) and use it for missing audience/targeting. Cite 1022.54 only when audience says prescreened. Add F111-1-4 (Major, Missing information: audience, CP-META-01) to A-111's pending findings."
+   },
+   {
+    "severity": "minor",
+    "where": "#dashboard work tiles and #queue tabs: src/screens/dashboard-queue.js:272-280, 358-385",
+    "problem": "The brief's \"Blocked by open Critical\" and \"Awaiting submitter (oldest age)\" tiles are missing. The blocked-critical preset exists, but no tile or tab reaches it, and Awaiting submitter is only a footer link. The Queue has no Needs manual review, Exceptions or Re-review due tabs, so those views exist only through dashboard presets.",
+    "fix": "Either add the two tiles (the predicate is already defined in metrics.definitions.blockedByCritical) or add Queue tabs or presets for Needs manual review, Approved with exceptions and Blocked by Critical, so every documented predicate can be reached from the UI."
+   }
+  ],
+  "strengths": [
+   "Email scope (decision 12) holds everywhere: no Resend, reply-to, forwarding address, submitter portal, sending domain or email notifications. Only sign-in emails exist (link, code, reset, invites), the notification drawer says 'Notifications are in-app only. Nothing is emailed.', and change requests say 'Nothing is sent' and offer Copy as text.",
+   "The connector flow has no file or folder pickers and no admin-consent step. Google shows two back-to-back Nango-branded consent screens (Gmail, then Drive with read-only scopes). Discovery runs automatically. Smart watch is the default, and narrowing to labels or folders is optional. Microsoft and Google Sheets carry 'illustrative' tags.",
+   "Roles are only owner and member: invites by email with pending, expired and revoked states, a last-owner guard, and partners shown as non-member submitter organizations used for Queue group-by.",
+   "Decision rules match decision 4: Approve with exceptions requires a reason category, a 40+ character justification with nothing prefilled, a version and short-sha restatement and an attestation, and shows an amber badge. Self-approval gets a badge, and self-approval with exceptions is blocked when the profile has more than one member (core canDecide).",
+   "Versions are never mutated: Edit copy, Apply suggestion and Add revision always create V(n+1) with origin and author recorded, approved versions are locked, and 'Changed after approval' (A-106) keeps V1 approved while showing V2 as unapproved, with its own dashboard tile and notification.",
+   "Security UX has two tiers: the A-109 hidden-text alert is pinned, forces Needs manual review and must be acknowledged before deciding, while A-104 gets a softer visible 'Possible injection' warning that doesn't block. Ask AI refuses to approve and lists open findings, and explains on A-109 that the hidden text was treated as content.",
+   "Critique fixes applied: Compare summary '3 resolved \u00b7 1 still present \u00b7 1 new' with a new Critical ($0 balance transfer fee); triage New version / Split / Declined + Restore; I-207 multi-creative email; two emails with one attachment; A-115 extraction failure that is never 'No issues flagged'; reuse chip on A-114; sync log with gap rescan; owner-removed and reconnect states; per-profile sub-cap plus global cap with a declined-run ledger row; History with an as-at-decision view; low-contrast disclosure check on A-112.",
+   "Tile counts come from live data and match the filtered Queue for every tile (checked by script: 6/1/1/1/1). Cross-profile URLs return the same Not found page, so asset existence isn't leaked. KPI tiles all carry the sample tag.",
+   "Policies match decision 6: cloneable starter library, versioned rules with a required change reason and word-level redline, offer edits that preview which approved assets become Re-review due, and read-only references 'verified as of 2026-11-06' with source URLs as plain text."
+  ]
+ }
+]
