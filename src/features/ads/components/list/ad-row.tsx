@@ -25,7 +25,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { removeAd, restoreAd } from "@/features/ads/server/remove-ad";
+import { removeAd, restoreAd } from "@/features/ads/server/actions/remove";
 import type { AdListRow, ThumbIcon } from "@/features/ads/server/queries";
 
 import { lifecycleLine, relativeTime } from "@/features/ads/format";

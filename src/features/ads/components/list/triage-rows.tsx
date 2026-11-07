@@ -7,7 +7,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { triageSourceItem } from "@/features/ads/server/actions";
+import { triageSourceItem } from "@/features/ads/server/actions/intake";
 import type { SkippedRow, TriageRow } from "@/features/ads/server/queries";
 
 import { channelLabel } from "@/features/ads/domain";

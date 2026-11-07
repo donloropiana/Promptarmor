@@ -9,6 +9,12 @@ import { requireSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/supabase/types";
 
+/**
+ * The trash can on an Ads list row and its undo: removing an ad marks it
+ * withdrawn (and its inbox item declined); restoring puts the earlier status
+ * back. Nothing is ever deleted.
+ */
+
 const uuid = z.string().uuid();
 
 /** Statuses a removed ad can be put back to (everything the list shows except approvals). */

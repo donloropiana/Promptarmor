@@ -6,7 +6,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { acknowledgeAlert } from "@/features/ads/server/actions";
+import { acknowledgeAlert } from "@/features/ads/server/actions/review";
 import type { AdAlert } from "@/features/ads/server/queries";
 
 import { LocalDateTime } from "@/features/ads/components/local-time";

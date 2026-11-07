@@ -9,7 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
-import { simulateRevision, unarchiveAd, type DecideResult } from "@/features/ads/server/actions";
+import { simulateRevision } from "@/features/ads/server/actions/versions";
+import { unarchiveAd } from "@/features/ads/server/actions/lifecycle";
+import { type DecideResult } from "@/features/ads/server/actions/review";
 import type { AdDetail } from "@/features/ads/server/queries";
 
 import { APPROVED_STATUSES, ARCHIVABLE_STATUSES } from "@/features/ads/domain";

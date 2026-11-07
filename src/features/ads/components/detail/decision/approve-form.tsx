@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
-import { decide, type DecideResult } from "@/features/ads/server/actions";
+import { decide, type DecideResult } from "@/features/ads/server/actions/review";
 import type { AdDetail } from "@/features/ads/server/queries";
 
 import { shortSha } from "@/features/ads/format";

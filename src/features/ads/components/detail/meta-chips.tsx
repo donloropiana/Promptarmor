@@ -5,7 +5,7 @@ import { toast } from "sonner";
 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
-import { updateAdMeta } from "@/features/ads/server/actions";
+import { updateAdMeta } from "@/features/ads/server/actions/details";
 
 import { CHANNEL_OPTIONS, channelLabel, normaliseChannel } from "@/features/ads/domain";
 import { PRODUCT_TYPES, productLabel, type Product } from "@/features/products/catalog";

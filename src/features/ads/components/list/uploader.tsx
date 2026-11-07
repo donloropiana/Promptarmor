@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { uploadAd } from "@/features/ads/server/actions";
+import { uploadAd } from "@/features/ads/server/actions/intake";
 import { visibleLength } from "@/features/analysis/infer";
 
 export const ACCEPT = ".pdf,.png,.jpg,.jpeg,.webp,.html,.htm,.txt,application/pdf,image/png,image/jpeg,image/webp,text/html,text/plain";

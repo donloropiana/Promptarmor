@@ -8,7 +8,7 @@ import { DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/co
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
-import { decide, type DecideResult } from "@/features/ads/server/actions";
+import { decide, type DecideResult } from "@/features/ads/server/actions/review";
 import type { AdDetail } from "@/features/ads/server/queries";
 
 /** The Reject dialog: a required reason, then the reject decision, which closes the ad. */

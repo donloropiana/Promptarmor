@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
-import { decide, type DecideResult } from "@/features/ads/server/actions";
+import { decide, type DecideResult } from "@/features/ads/server/actions/review";
 import type { AdDetail, AdFinding } from "@/features/ads/server/queries";
 
 import { severityLabel } from "@/features/rules/severity";

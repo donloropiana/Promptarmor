@@ -10,7 +10,8 @@ import { DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/co
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
-import { archiveAd, withdrawApproval } from "@/features/ads/server/actions";
+import { archiveAd } from "@/features/ads/server/actions/lifecycle";
+import { withdrawApproval } from "@/features/ads/server/actions/review";
 import type { AdDetail } from "@/features/ads/server/queries";
 
 import { APPROVED_STATUSES } from "@/features/ads/domain";

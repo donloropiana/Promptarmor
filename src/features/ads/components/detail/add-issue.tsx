@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { addReviewerIssue } from "@/features/ads/server/actions";
+import { addReviewerIssue } from "@/features/ads/server/actions/review";
 import { MAX_IMAGE_LABEL_CHARS } from "@/features/ads/types";
 import { SEVERITIES, SEVERITY_LABELS, type Severity } from "@/features/rules/severity";
 

@@ -6,7 +6,7 @@ import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
-import { askAboutAd } from "@/features/ads/server/actions";
+import { askAboutAd } from "@/features/ads/server/actions/ask";
 
 /**
  * "Ask about this ad": the only AI chat in the product. Plain text in,

@@ -9,7 +9,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { LocalDateTime } from "@/features/ads/components/local-time";
 import { LongText } from "@/features/ads/components/long-text";
 import { formatDuration, formatUsd, relativeTime, shortSha } from "@/features/ads/format";
-import { simulateRevision } from "@/features/ads/server/actions";
+import { simulateRevision } from "@/features/ads/server/actions/versions";
 import type { AdDecision, AdDetail } from "@/features/ads/server/queries";
 
 /**
