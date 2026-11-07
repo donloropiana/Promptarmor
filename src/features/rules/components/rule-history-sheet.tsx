@@ -3,15 +3,15 @@
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import type { RuleVersion, WorkspaceRule } from "@/features/rules/server/queries";
-import { PRODUCT_LABELS } from "@/features/rules/labels";
+import { APPLIES_TO_LABELS } from "@/features/rules/labels";
 
 import { dateTime } from "@/lib/format";
 
 import { Redline, ValueChange } from "@/components/redline";
-import { SEVERITY_LABELS } from "./severity";
+import { SEVERITY_LABELS } from "@/features/rules/severity";
 
 function productList(v: string[]): string {
-  return v.map((p) => PRODUCT_LABELS[p] ?? p).join(", ");
+  return v.map((p) => APPLIES_TO_LABELS[p] ?? p).join(", ");
 }
 
 function VersionEntry({ version, previous, isCurrent }: { version: RuleVersion; previous: RuleVersion | null; isCurrent: boolean }) {

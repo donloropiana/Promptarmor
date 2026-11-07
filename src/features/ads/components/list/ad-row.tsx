@@ -30,7 +30,7 @@ import type { AdListRow, ThumbIcon } from "@/features/ads/server/queries";
 
 import { lifecycleLine, relativeTime } from "@/features/ads/format";
 import { useLocalDateTime } from "@/features/ads/components/local-time";
-import { RiskMark } from "@/features/ads/components/severity";
+import { RiskMark } from "@/features/rules/components/severity";
 import { ReasonTags, StatusWord } from "@/features/ads/components/status";
 
 const THUMB_ICONS: Record<ThumbIcon, typeof FileText> = {

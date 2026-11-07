@@ -33,7 +33,7 @@ import { loadRecordings, recordedFindings, type RecordedCheck } from "@/features
 import type { OfferInput, RuleInput } from "@/features/analysis/schema";
 import { STARTER_PRODUCTS } from "@/features/products/starter-products";
 import { STARTER_RULES } from "@/features/rules/starter-rules";
-import type { Product } from "@/features/ads/types";
+import type { Product } from "@/features/products/catalog";
 
 type Fixture = {
   key: string;

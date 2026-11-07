@@ -1,5 +1,5 @@
 import { sha256Hex } from "./hash";
-import type { Product } from "@/features/ads/types";
+import type { Product } from "@/features/products/catalog";
 
 import type { ContentFinding, OfferInput, RuleInput } from "./schema";
 

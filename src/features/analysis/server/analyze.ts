@@ -1,6 +1,7 @@
 import { generateText, Output } from "ai";
 
-import type { Product, Severity } from "@/features/ads/types";
+import type { Product } from "@/features/products/catalog";
+import type { Severity } from "@/features/rules/severity";
 
 import { MODELS, costUsd } from "@/lib/ai/budget";
 import { detectHiddenText } from "@/features/analysis/hidden-text";

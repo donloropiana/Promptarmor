@@ -7,7 +7,7 @@ import { shortDate } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { WorkspaceOffer } from "@/features/rules/server/queries";
-import { PRODUCT_LABELS } from "@/features/rules/labels";
+import { PRODUCT_LABELS } from "@/features/products/catalog";
 import { cn } from "@/lib/utils";
 
 import { ProductEditSheet } from "./product-edit-sheet";
@@ -36,7 +36,7 @@ export function ProductCard({ offer }: { offer: WorkspaceOffer }) {
             {!offer.active ? <Badge variant="outline">Archived</Badge> : null}
           </div>
           <p className="text-xs text-muted-foreground">
-            {PRODUCT_LABELS[offer.product] ?? offer.product} · <span className="tabular-nums">V{v.versionNo}</span> · effective {shortDate(v.effectiveFrom)}
+            {PRODUCT_LABELS[offer.product]} · <span className="tabular-nums">V{v.versionNo}</span> · effective {shortDate(v.effectiveFrom)}
           </p>
         </div>
       </div>

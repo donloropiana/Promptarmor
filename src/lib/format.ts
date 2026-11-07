@@ -83,8 +83,3 @@ export function initials(name: string | null | undefined, email?: string | null)
   }
   return (email?.trim()[0] ?? "?").toUpperCase();
 }
-
-/** Plural helper: count("ad", 2) -> "2 ads". */
-export function count(noun: string, n: number, plural = `${noun}s`): string {
-  return `${n} ${n === 1 ? noun : plural}`;
-}

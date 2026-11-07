@@ -4,6 +4,7 @@ import type { PostgrestError } from "@supabase/supabase-js";
 import { refresh } from "next/cache";
 import { z } from "zod";
 
+import { PRODUCT_TYPES } from "@/features/products/catalog";
 import { TERM_FIELDS } from "@/features/products/term-fields";
 import { SIGNED_OUT, invalid, type ActionResult as SharedActionResult } from "@/lib/action-result";
 import { getMembershipRole } from "@/features/auth/server/dal";
@@ -52,7 +53,7 @@ const addSchema = z.object({
     .trim()
     .toUpperCase()
     .regex(/^[A-Z0-9][A-Z0-9_.-]{0,39}$/, { error: "Codes use letters, numbers, dots or dashes (max 40)." }),
-  product: z.enum(["personal_loan", "credit_card", "mortgage", "other"], { error: "Choose a product type." }),
+  product: z.enum(PRODUCT_TYPES, { error: "Choose a product type." }),
   name: z.string({ error: "Give the product a name." }).trim().min(1, { error: "Give the product a name." }).max(200),
   terms: termsSchema,
   reason: reason.default("Added by a member"),

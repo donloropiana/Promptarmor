@@ -12,15 +12,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Spinner } from "@/components/ui/spinner";
 import { addOffer } from "@/features/products/server/actions";
-import { PRODUCT_LABELS } from "@/features/rules/labels";
+import { PRODUCT_LABELS, PRODUCT_TYPES, type ProductType } from "@/features/products/catalog";
 
 import { ProductTermFields, type TermFormValues } from "./product-term-fields";
 import { fieldsForEdit } from "@/features/products/term-fields";
 
 const CORE_FIELDS = fieldsForEdit(null);
-
-type ProductType = "personal_loan" | "credit_card" | "mortgage" | "other";
-const PRODUCT_TYPES: ProductType[] = ["personal_loan", "credit_card", "mortgage", "other"];
 
 /** "Add product": an offers row plus its first terms version. */
 export function AddProductSheet({ profileId }: { profileId: string }) {

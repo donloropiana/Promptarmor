@@ -19,9 +19,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { archiveAd, decide, simulateRevision, unarchiveAd, withdrawApproval, type DecideResult } from "@/features/ads/server/actions";
 import type { AdDetail, AdFinding } from "@/features/ads/server/queries";
 
-import { APPROVED_STATUSES, ARCHIVABLE_STATUSES, formatDate, severityLabel, shortSha } from "@/features/ads/format";
+import { APPROVED_STATUSES, ARCHIVABLE_STATUSES } from "@/features/ads/domain";
+import { formatDate, shortSha } from "@/features/ads/format";
+import { severityLabel } from "@/features/rules/severity";
 import { issueTitle } from "./issues-panel";
-import { SeverityWord } from "@/features/ads/components/severity";
+import { SeverityWord } from "@/features/rules/components/severity";
 
 const EXCEPTION_REASONS = [
   { value: "business_decision", label: "Business decision: the risk is accepted" },

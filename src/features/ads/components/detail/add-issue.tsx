@@ -13,7 +13,8 @@ import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { addReviewerIssue } from "@/features/ads/server/actions";
-import { MAX_IMAGE_LABEL_CHARS, type Severity } from "@/features/ads/types";
+import { MAX_IMAGE_LABEL_CHARS } from "@/features/ads/types";
+import { SEVERITIES, SEVERITY_LABELS, type Severity } from "@/features/rules/severity";
 
 /**
  * "+ Add issue": a reviewer quotes words the AI missed. The quote comes from
@@ -83,23 +84,12 @@ export function readAdSelection(container: HTMLElement | null): AdSelection | nu
   return { quote, first: box(first), rect: box(last) };
 }
 
-const SEVERITIES: { value: Severity; label: string; hint: string }[] = [
-  {
-    value: "critical",
-    label: "Critical",
-    hint: "the ad cannot run as written; needs a fix or a written exception",
-  },
-  {
-    value: "major",
-    label: "Major",
-    hint: "needs a fix or a written exception",
-  },
-  {
-    value: "minor",
-    label: "Minor",
-    hint: "worth fixing, does not block approval",
-  },
-];
+/** What each severity means for the ad, under the picker. */
+const SEVERITY_HINTS: Record<Severity, string> = {
+  critical: "the ad cannot run as written; needs a fix or a written exception",
+  major: "needs a fix or a written exception",
+  minor: "worth fixing, does not block approval",
+};
 
 export function AddIssueDialog({ open, onOpenChange, ...form }: AddIssueFormProps & { open: boolean }) {
   const whyRef = useRef<HTMLTextAreaElement>(null);
@@ -264,13 +254,13 @@ function AddIssueForm({
               </SelectTrigger>
               <SelectContent>
                 {SEVERITIES.map((s) => (
-                  <SelectItem key={s.value} value={s.value}>
-                    {s.label}
+                  <SelectItem key={s} value={s}>
+                    {SEVERITY_LABELS[s]}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground">{SEVERITIES.find((s) => s.value === severity)?.hint}</p>
+            <p className="text-xs text-muted-foreground">{SEVERITY_HINTS[severity]}</p>
           </div>
           <div className="grid min-w-0 gap-1.5">
             <Label htmlFor="add-issue-rule">Rule it breaks</Label>

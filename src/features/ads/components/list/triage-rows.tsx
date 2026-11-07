@@ -10,7 +10,9 @@ import { Spinner } from "@/components/ui/spinner";
 import { triageSourceItem } from "@/features/ads/server/actions";
 import type { SkippedRow, TriageRow } from "@/features/ads/server/queries";
 
-import { channelLabel, productLabel, providerName, relativeTime } from "@/features/ads/format";
+import { channelLabel } from "@/features/ads/domain";
+import { providerName, relativeTime } from "@/features/ads/format";
+import { productLabel } from "@/features/products/catalog";
 
 /**
  * Things that arrived from a connected inbox or drive and look like ads.

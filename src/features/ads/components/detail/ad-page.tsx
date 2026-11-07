@@ -17,7 +17,8 @@ import { AutoRefresh } from "@/features/ads/components/auto-refresh";
 import { CreativeView, type CreativeViewMode } from "./creative-view";
 import { DecisionBar, NO_DIALOGS, blockingReason, type DecisionDialogs } from "./decision-bar";
 import { EditVersionSheet, editableText, type EditTab } from "./edit-version";
-import { APPROVED_STATUSES, formatDuration, formatUsd, isLive, relativeTime, shortSha, stageLabel } from "@/features/ads/format";
+import { APPROVED_STATUSES, adTags, isLive, isNotScreened } from "@/features/ads/domain";
+import { formatDuration, formatUsd, relativeTime, shortSha, stageLabel } from "@/features/ads/format";
 import { HiddenTextAlert } from "./hidden-text-alert";
 import { History } from "./history";
 import { IssuesPanel, issueTitle } from "./issues-panel";
@@ -42,17 +43,18 @@ const useIsDesktop = () =>
     () => false,
   );
 
+/** The same tags as the ad's row in the list. */
 function tagsFor(detail: AdDetail): string[] {
-  const tags: string[] = [];
-  if (detail.isSample) tags.push("Sample");
-  if (detail.alerts.some((a) => !a.acknowledgedAt)) tags.push("Hidden text");
-  if (detail.status === "re_review_due") tags.push(detail.reReviewReason?.kind === "expired" ? "Expired" : "Rates changed");
-  if (detail.status === "approved_with_exceptions") tags.push("With exceptions");
-  if (detail.changedAfterApproval) tags.push("Changed after approval");
-  if (!detail.checking && !detail.aiScreened && detail.latestRun && detail.latestRun.status !== "queued" && detail.latestRun.status !== "running") tags.push("Not AI-screened");
-  if (detail.latest.versionNo > 1 && !APPROVED_STATUSES.has(detail.status)) tags.push(`V${detail.latest.versionNo}`);
-  else if (detail.decisions.length === 0 && !detail.checking) tags.push("New");
-  return tags;
+  return adTags({
+    status: detail.status,
+    versionNo: detail.latest.versionNo,
+    hasDecisions: detail.decisions.length > 0,
+    hiddenText: detail.alerts.some((a) => !a.acknowledgedAt),
+    changedAfterApproval: detail.changedAfterApproval,
+    notScreened: isNotScreened(detail.status, detail.latestRun?.status),
+    isSample: detail.isSample,
+    reReviewReason: detail.reReviewReason,
+  });
 }
 
 export function AdPage({ detail, userId }: { detail: AdDetail; userId: string }) {

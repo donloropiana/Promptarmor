@@ -13,7 +13,7 @@ import type { AdListRow, SkippedRow, TriageRow } from "@/features/ads/server/que
 
 import { AdRow } from "./ad-row";
 import { AutoRefresh } from "@/features/ads/components/auto-refresh";
-import { LIST_CAP, TABS, type Tab } from "@/features/ads/format";
+import { LIST_CAP, TABS, type Tab } from "@/features/ads/domain";
 import { LIST_SHORTCUTS, ShortcutsDialog, isTypingTarget } from "@/features/ads/components/detail/shortcuts-dialog";
 import { SkippedLine, TriageRows } from "./triage-rows";
 

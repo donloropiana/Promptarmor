@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { setRuleActive } from "@/features/rules/server/actions";
 import type { WorkspaceRule } from "@/features/rules/server/queries";
-import { PRODUCT_LABELS, RULE_KIND_LABELS } from "@/features/rules/labels";
+import { APPLIES_TO_LABELS, RULE_KIND_LABELS } from "@/features/rules/labels";
 import { cn } from "@/lib/utils";
 
 import { RuleEditSheet } from "./rule-edit-sheet";
@@ -73,7 +73,7 @@ export function RuleCard({ rule }: { rule: WorkspaceRule }) {
       <div className="flex flex-wrap items-center gap-1.5">
         {v.appliesTo.map((p) => (
           <Badge key={p} variant="outline" className="font-normal">
-            {PRODUCT_LABELS[p] ?? p}
+            {APPLIES_TO_LABELS[p] ?? p}
           </Badge>
         ))}
         {rule.references.map((r) =>

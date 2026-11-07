@@ -20,6 +20,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { FIXTURE_ADS, SAMPLE_ADS, SAMPLE_KEYS } from "@/features/ads/samples";
+import { isProductType } from "@/features/products/catalog";
 import { STARTER_PRODUCTS } from "@/features/products/starter-products";
 import { REFERENCE_LIBRARY, STARTER_RULES } from "@/features/rules/starter-rules";
 
@@ -56,7 +57,7 @@ for (const p of STARTER_PRODUCTS) {
   if (seenProducts.has(p.code)) warn(`duplicate product code ${p.code}`);
   seenProducts.add(p.code);
   if (typeof p.terms.summary !== "string" || !p.terms.summary) warn(`product ${p.code} has no summary`);
-  if (!["personal_loan", "credit_card", "mortgage", "other"].includes(p.product)) warn(`product ${p.code} bad product`);
+  if (!isProductType(p.product)) warn(`product ${p.code} bad product`);
 }
 
 // Fixtures

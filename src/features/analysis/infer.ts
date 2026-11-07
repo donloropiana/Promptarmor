@@ -1,4 +1,4 @@
-import type { Product } from "@/features/ads/types";
+import type { Product } from "@/features/products/catalog";
 
 /**
  * Cheap, deterministic inference of product, channel and title for a new ad.

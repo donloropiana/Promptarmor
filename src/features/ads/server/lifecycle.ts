@@ -1,6 +1,6 @@
 import "server-only";
 
-import { APPROVED_STATUSES, liveChannelLabel } from "@/features/ads/format";
+import { APPROVED_STATUSES, liveChannelLabel } from "@/features/ads/domain";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/lib/supabase/types";
 

@@ -7,7 +7,9 @@ import { normalizedTextHash, sha256Hex } from "@/features/analysis/hash";
 import { requireSupabaseAdminClient } from "@/lib/supabase/admin";
 import { downloadObject } from "@/lib/supabase/storage";
 import type { Database, Json, TablesInsert } from "@/lib/supabase/types";
-import { imageRegionOf, type Product, type Severity, type VersionContent } from "@/features/ads/types";
+import { imageRegionOf, type VersionContent } from "@/features/ads/types";
+import { asProduct, type Product } from "@/features/products/catalog";
+import type { Severity } from "@/features/rules/severity";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { analyzeContent, hiddenTextRuleCode, LLM_TIMEOUT_MS, mergeFindings } from "./analyze";
@@ -63,10 +65,6 @@ type AssetRow = Pick<Database["public"]["Tables"]["assets"]["Row"], "id" | "prof
 
 type LoadedRule = RuleInput & { rule_id: string; rule_version_id: string; kind: string };
 type LoadedOffer = OfferInput & { offer_id: string; offer_version_id: string };
-
-function isProduct(v: unknown): v is Product {
-  return v === "personal_loan" || v === "credit_card" || v === "mortgage" || v === "other" || v === "unknown";
-}
 
 function errorText(err: unknown): string {
   if (err instanceof Error) {
@@ -236,7 +234,7 @@ export async function runAnalysis(runId: string): Promise<void> {
     asset = await loadAsset(admin, version.asset_id);
     const content = (version.content ?? {}) as VersionContent;
     const sections: Section[] = Array.isArray(content.sections) ? content.sections : [];
-    const product: Product = isProduct(asset.product) ? asset.product : "unknown";
+    const product: Product = asProduct(asset.product);
     const format = content.format ?? "text";
     const channel = asset.channel ?? content.meta?.channel ?? null;
 

@@ -6,9 +6,9 @@ import { toast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { updateAdMeta } from "@/features/ads/server/actions";
-import type { Product } from "@/features/ads/types";
 
-import { CHANNEL_OPTIONS, PRODUCT_OPTIONS, channelLabel, normaliseChannel, productLabel } from "@/features/ads/format";
+import { CHANNEL_OPTIONS, channelLabel, normaliseChannel } from "@/features/ads/domain";
+import { PRODUCT_TYPES, productLabel, type Product } from "@/features/products/catalog";
 
 /** Product and channel as editable chips. Each change is an audit event. */
 export function MetaChips({ assetId, product, channel, inferred, disabled }: { assetId: string; product: Product; channel: string | null; inferred?: boolean; disabled?: boolean }) {
@@ -42,7 +42,7 @@ export function MetaChips({ assetId, product, channel, inferred, disabled }: { a
           <SelectValue>{productLabel(p)}</SelectValue>
         </SelectTrigger>
         <SelectContent>
-          {PRODUCT_OPTIONS.map((o) => (
+          {PRODUCT_TYPES.map((o) => (
             <SelectItem key={o} value={o}>
               {productLabel(o)}
             </SelectItem>

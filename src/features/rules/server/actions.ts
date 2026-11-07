@@ -9,6 +9,7 @@ import { getMembershipRole } from "@/features/auth/server/dal";
 import { requireSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getSupabaseContext, type AppSupabaseContext } from "@/lib/supabase/context";
 import type { Json } from "@/lib/supabase/types";
+import { SEVERITIES } from "@/features/rules/severity";
 
 /**
  * Rules Server Actions. The user-context client (RLS) proves membership by
@@ -22,7 +23,7 @@ export type ActionResult<T = null> = SharedActionResult<T>;
 type Input = FormData | Record<string, unknown>;
 
 const id = z.guid({ error: "Invalid id." });
-const severity = z.enum(["critical", "major", "minor"], { error: "Choose a severity." });
+const severity = z.enum(SEVERITIES, { error: "Choose a severity." });
 const appliesTo = z.preprocess(
   (v) => {
     if (Array.isArray(v)) return v;

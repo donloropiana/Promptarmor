@@ -32,7 +32,7 @@ import { extractFromHtml, extractFromText } from "@/features/analysis/extract";
 import { normalizedTextHash, sha256Hex } from "@/features/analysis/hash";
 import { STARTER_PRODUCTS } from "@/features/products/starter-products";
 import { STARTER_RULES } from "@/features/rules/starter-rules";
-import type { Product } from "@/features/ads/types";
+import type { Product } from "@/features/products/catalog";
 
 type Fixture = {
   key: string;

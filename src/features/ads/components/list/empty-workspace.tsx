@@ -10,7 +10,8 @@ import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { trySample } from "@/features/ads/server/actions";
 
-import { channelLabel, productLabel } from "@/features/ads/format";
+import { channelLabel } from "@/features/ads/domain";
+import { productLabel } from "@/features/products/catalog";
 import { ChooseFileButton, useAdUpload } from "./uploader";
 
 export type SampleChip = { key: string; title: string; description: string; product: string; channel: string; hiddenText: boolean };

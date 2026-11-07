@@ -1,4 +1,6 @@
-import type { Product, SampleKey } from "./types";
+import type { Product } from "@/features/products/catalog";
+
+import type { SampleKey } from "./types";
 
 /**
  * Known-answer sample ads for the demo and the eval.
@@ -66,14 +68,6 @@ export const CHANNEL_LABELS: Record<string, string> = {
   paid_search: "Paid search",
   direct_mail: "Direct mail",
   internal: "Internal document",
-};
-
-export const PRODUCT_LABELS: Record<Product, string> = {
-  personal_loan: "Personal loan",
-  credit_card: "Credit card",
-  mortgage: "Mortgage",
-  other: "Other",
-  unknown: "Unknown",
 };
 
 const CREDIT_CARD_EMAIL_HTML = `<!doctype html>

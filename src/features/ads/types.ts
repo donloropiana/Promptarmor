@@ -1,16 +1,13 @@
+import type { Product } from "@/features/products/catalog";
+
 /**
  * Shared ad/version/finding types (contract shared by every engineer).
  *
  * These mirror the database (docs/schema.md §2) but use the product's words
- * where the two differ. Keep this file dependency-free: it is imported by
- * server code, client components and scripts alike.
+ * where the two differ. Keep this file framework-free: it is imported by
+ * server code, client components and scripts alike. Product lives in
+ * src/features/products/catalog.ts, Severity in src/features/rules/severity.ts.
  */
-
-/** assets.product */
-export type Product = "personal_loan" | "credit_card" | "mortgage" | "other" | "unknown";
-
-/** findings.severity */
-export type Severity = "critical" | "major" | "minor";
 
 /**
  * asset_versions.content. `extracted_text` on the same row is the plain text

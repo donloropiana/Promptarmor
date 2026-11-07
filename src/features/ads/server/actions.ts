@@ -7,7 +7,7 @@ import { after } from "next/server";
 import { z } from "zod";
 
 import { SIGNED_OUT, invalid, type ActionResult as SharedActionResult } from "@/lib/action-result";
-import { APPROVED_STATUSES, ARCHIVABLE_STATUSES, isLive } from "@/features/ads/format";
+import { APPROVED_STATUSES, ARCHIVABLE_STATUSES, isLive } from "@/features/ads/domain";
 import { startAnalysisForVersion, askAboutAd as askAboutAdEngine } from "@/features/analysis/server/engine";
 import { locateQuote, spanHash } from "@/features/analysis/spans";
 import { getActiveProfileId, getCurrentUser, getMembershipRole } from "@/features/auth/server/dal";
@@ -25,7 +25,8 @@ import { visibleLength } from "@/features/analysis/infer";
 import { requireSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/supabase/types";
-import { MAX_IMAGE_LABEL_CHARS, type AdFile, type Product } from "@/features/ads/types";
+import { MAX_IMAGE_LABEL_CHARS, type AdFile } from "@/features/ads/types";
+import { PRODUCTS, type Product } from "@/features/products/catalog";
 
 /**
  * Server Actions for the Ads list and the Ad page.
@@ -51,7 +52,7 @@ const ACCEPTED_MIME = new Set(["application/pdf", "image/png", "image/jpeg", "im
 const ACCEPTED_EXT = /\.(pdf|png|jpe?g|webp|html?|txt)$/i;
 
 const uuid = z.guid({ error: "Invalid id." });
-const productSchema = z.enum(["personal_loan", "credit_card", "mortgage", "other", "unknown"]);
+const productSchema = z.enum(PRODUCTS);
 
 function fail(err: unknown, fallback: string): ActionResult<never> {
   const message = err instanceof Error ? err.message : String(err);
@@ -184,7 +185,8 @@ export async function uploadAd(formData: FormData): Promise<ActionResult<never>>
   const titleRaw = String(formData.get("title") ?? "").trim();
   const productRaw = String(formData.get("product") ?? "").trim();
   const channelRaw = String(formData.get("channel") ?? "").trim();
-  const product = productSchema.safeParse(productRaw).success ? (productRaw as Product) : undefined;
+  const parsedProduct = productSchema.safeParse(productRaw);
+  const product = parsedProduct.success ? parsedProduct.data : undefined;
 
   const file = await fileFromForm(formData);
   if (file && "ok" in file) return file;

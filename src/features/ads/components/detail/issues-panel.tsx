@@ -13,11 +13,10 @@ import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { applySuggestion, dispositionFinding } from "@/features/ads/server/actions";
 import type { AdFinding } from "@/features/ads/server/queries";
-import type { Severity } from "@/features/ads/types";
 
-import { severityLabel } from "@/features/ads/format";
+import { severityLabel, type Severity } from "@/features/rules/severity";
 import { LongText } from "@/features/ads/components/long-text";
-import { SeverityWord } from "@/features/ads/components/severity";
+import { SeverityWord } from "@/features/rules/components/severity";
 import { recheckLabel } from "./what-changed";
 
 const REASONS = [

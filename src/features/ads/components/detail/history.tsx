@@ -7,7 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { AdDecision, AdDetail, AdEvent, AdRun } from "@/features/ads/server/queries";
 
-import { formatDate, formatDuration, formatUsd, liveChannelLabel, productLabel, severityLabel, shortSha, statusWord } from "@/features/ads/format";
+import { liveChannelLabel, statusWord } from "@/features/ads/domain";
+import { formatDate, formatDuration, formatUsd, shortSha } from "@/features/ads/format";
+import { productLabel } from "@/features/products/catalog";
+import { severityLabel } from "@/features/rules/severity";
 import { LocalDateTime, useLocalDateTime } from "@/features/ads/components/local-time";
 
 type Entry = { id: string; at: string; who: string | null; what: string; detail?: string; decision?: AdDecision; run?: AdRun };

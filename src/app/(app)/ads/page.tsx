@@ -4,7 +4,7 @@ import { Suspense } from "react";
 
 import { AdsList } from "@/features/ads/components/list/ads-list";
 import { EmptyWorkspace, type SampleChip } from "@/features/ads/components/list/empty-workspace";
-import { parseTab } from "@/features/ads/format";
+import { parseTab } from "@/features/ads/domain";
 import { Banners, MetricsStrip, SummaryLine } from "@/features/ads/components/list/metrics-strip";
 import { AdsListSkeleton } from "@/features/ads/components/skeletons";
 import { DropBar, WindowDropOverlay } from "@/features/ads/components/list/uploader";

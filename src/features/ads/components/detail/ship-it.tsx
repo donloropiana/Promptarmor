@@ -12,7 +12,8 @@ import { Spinner } from "@/components/ui/spinner";
 import { markLive, setExpiry, unarchiveAd } from "@/features/ads/server/actions";
 import type { AdDetail } from "@/features/ads/server/queries";
 
-import { LIVE_CHANNELS, formatDate, isLive, lifecycleLine } from "@/features/ads/format";
+import { LIVE_CHANNELS, isLive } from "@/features/ads/domain";
+import { formatDate, lifecycleLine } from "@/features/ads/format";
 import { LongText } from "@/features/ads/components/long-text";
 
 function hostOf(url: string | null): string | null {

@@ -8,7 +8,7 @@ import { REFERENCE_LIBRARY, REFERENCES_VERIFIED_AS_OF, STARTER_RULES, type Start
 
 export { REFERENCE_LIBRARY, STARTER_RULES, STARTER_RULE_CODES } from "@/features/rules/starter-rules";
 export { STARTER_PRODUCTS, STARTER_PRODUCT_CODES } from "@/features/products/starter-products";
-export { SAMPLE_ADS, SAMPLE_KEYS, SAMPLE_CHIPS, FIXTURE_ADS, CHANNEL_LABELS, PRODUCT_LABELS, getSampleAd, isSampleKey } from "@/features/ads/samples";
+export { SAMPLE_ADS, SAMPLE_KEYS, SAMPLE_CHIPS, FIXTURE_ADS, CHANNEL_LABELS, getSampleAd, isSampleKey } from "@/features/ads/samples";
 export type { SampleAd } from "@/features/ads/samples";
 export type { StarterRule, ReferenceEntry } from "@/features/rules/starter-rules";
 export type { StarterProduct } from "@/features/products/starter-products";

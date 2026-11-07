@@ -1,4 +1,5 @@
-import type { Product, Severity } from "@/features/ads/types";
+import type { Product } from "@/features/products/catalog";
+import type { Severity } from "@/features/rules/severity";
 
 /**
  * Starter rule library for lenders' marketing review.

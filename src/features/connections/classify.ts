@@ -1,3 +1,5 @@
+import type { Product } from "@/features/products/catalog";
+
 /**
  * Cheap, deterministic pre-classifier for connector arrivals. NO LLM.
  *
@@ -12,8 +14,6 @@
  */
 
 export type PreClassification = "marketing" | "not_marketing" | "uncertain" | "inline_image";
-
-export type InferredProduct = "personal_loan" | "credit_card" | "mortgage" | "other" | "unknown";
 
 export interface ClassifyInput {
   kind: "email" | "attachment" | "file";
@@ -34,7 +34,7 @@ export interface ClassifyResult {
   reason: string;
   /** Stored as source_items.inferred. */
   inferred: {
-    product: InferredProduct;
+    product: Product;
     channel: string | null;
     confirmed: false;
     score: number;
@@ -78,7 +78,7 @@ const NOT_MARKETING: Signal[] = [
   { label: "dev/ops", re: /\b(pull request|merge request|build (failed|passed)|deploy(ment)? (failed|succeeded)|jira|github)\b/i, weight: 2 },
 ];
 
-const PRODUCT_RULES: { product: InferredProduct; re: RegExp }[] = [
+const PRODUCT_RULES: { product: Product; re: RegExp }[] = [
   { product: "mortgage", re: /\bmortgages?\b|\brefinanc\w*|\bheloc\b|\bhome equity\b|\bhome loans?\b|\bequal housing\b/i },
   { product: "credit_card", re: /\bcredit cards?\b|\bcash ?back\b|\bbalance transfer\b|\brewards card\b|\bannual fee\b|\bcard\b/i },
   { product: "personal_loan", re: /\bpersonal loans?\b|\bdebt consolidation\b|\bconsolidation loan\b|\bloans?\b/i },

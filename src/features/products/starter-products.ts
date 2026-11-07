@@ -1,4 +1,4 @@
-import type { Product } from "@/features/ads/types";
+import type { ProductType } from "@/features/products/catalog";
 
 /**
  * ClearPath Financial's (fictional) product terms. These are the "actually
@@ -9,7 +9,7 @@ import type { Product } from "@/features/ads/types";
  */
 export type StarterProduct = {
   code: string;
-  product: Exclude<Product, "unknown">;
+  product: ProductType;
   name: string;
   terms: Record<string, unknown>;
 };

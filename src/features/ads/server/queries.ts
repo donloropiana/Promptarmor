@@ -8,17 +8,19 @@ import {
   APPROVED_STATUSES,
   EMPTY_COUNTS,
   NEEDS_REVIEW_STATUSES,
-  SEVERITY_ORDER,
-  asProduct,
-  asSeverity,
-  providerName,
+  adTags,
+  isNotScreened,
+  rankAd,
   tabForAsset,
   type Tab,
-} from "@/features/ads/format";
+} from "@/features/ads/domain";
+import { providerName } from "@/features/ads/format";
 import { locateQuote } from "@/features/analysis/spans";
+import { asProduct, type Product } from "@/features/products/catalog";
+import { SEVERITY_ORDER, asSeverity, type Severity } from "@/features/rules/severity";
 import { createClient } from "@/lib/supabase/server";
 import type { Database, Json } from "@/lib/supabase/types";
-import { imageRegionOf, type FindingAnchor, type ImageRegionAnchor, type Product, type Severity, type VersionContent } from "@/features/ads/types";
+import { imageRegionOf, type FindingAnchor, type ImageRegionAnchor, type VersionContent } from "@/features/ads/types";
 
 /**
  * Reads for the Ads list and the Ad page. Everything goes through the
@@ -72,7 +74,7 @@ export type AdListRow = {
   withExceptions: boolean;
   /** Exceptions recorded on the standing approval (0 when none or not approved). */
   exceptionCount: number;
-  /** Life after approval (see src/features/ads/format.ts isLive / lifecycleLine). */
+  /** Life after approval (see src/features/ads/domain.ts isLive, format.ts lifecycleLine). */
   liveAt: string | null;
   liveChannel: string | null;
   liveUrl: string | null;
@@ -233,36 +235,6 @@ async function loadLifecycle(db: Db, profileId: string, assetIds: string[]): Pro
   }
   for (const r of data ?? []) map.set(r.id, r);
   return map;
-}
-
-/** Why an approved ad is back in Needs review: the product terms changed, or its end date passed. */
-export function reReviewTag(reason: Json | Record<string, unknown> | null | undefined): "Rates changed" | "Expired" {
-  const kind = reason && typeof reason === "object" && !Array.isArray(reason) ? (reason as Record<string, unknown>).kind : null;
-  return kind === "expired" ? "Expired" : "Rates changed";
-}
-
-function tagsFor(input: {
-  status: string;
-  versionNo: number;
-  hasDecisions: boolean;
-  hiddenText: boolean;
-  changedAfterApproval: boolean;
-  notScreened: boolean;
-  isSample: boolean;
-  reReviewReason: Json | null;
-}): string[] {
-  const tags: string[] = [];
-  if (input.isSample) tags.push("Sample");
-  if (input.hiddenText) tags.push("Hidden text");
-  if (input.status === "re_review_due") tags.push(reReviewTag(input.reReviewReason));
-  if (input.status === "approved_with_exceptions") tags.push("With exceptions");
-  if (input.changedAfterApproval) tags.push("Changed after approval");
-  if (input.notScreened) tags.push("Not AI-screened");
-  if (NEEDS_REVIEW_STATUSES.has(input.status) || input.status === "changes_requested") {
-    if (input.versionNo > 1) tags.push(`V${input.versionNo}`);
-    else if (!input.hasDecisions) tags.push("New");
-  }
-  return tags;
 }
 
 // ---------------------------------------------------------------------------
@@ -479,6 +451,7 @@ export async function listAdsWith(db: Db, profileId: string, userId: string): Pr
   const signed = await signUrls(db, imagePaths);
 
   const rows: AdListRow[] = [];
+  const now = Date.now();
   for (const q of visibleQueue) {
     const meta = assetMeta.get(q.asset_id!);
     const version = versions.get(q.latest_version_id!);
@@ -488,7 +461,7 @@ export async function listAdsWith(db: Db, profileId: string, userId: string): Pr
     const isSample = meta?.audience === "sample";
     const hiddenText = (q.open_alert_count ?? 0) > 0;
     const checking = q.analysis_status === "queued" || q.analysis_status === "running";
-    const notScreened = status === "needs_manual_review" && q.analysis_status !== "complete";
+    const notScreened = isNotScreened(status, q.analysis_status);
     const decisions = decisionsByAsset.get(q.asset_id!) ?? [];
     const approval = q.approved_decision_id ? decisions.find((d) => d.id === q.approved_decision_id) ?? null : null;
     const top = topByVersion.get(q.latest_version_id!);
@@ -537,14 +510,6 @@ export async function listAdsWith(db: Db, profileId: string, userId: string): Pr
     const openMajor = (q.open_major ?? 0) || loadedOpen?.major || 0;
     const openMinor = (q.open_minor ?? 0) || loadedOpen?.minor || 0;
     const submittedAt = q.submitted_at ?? q.created_at ?? new Date(0).toISOString();
-    const ageMs = Math.max(0, Date.now() - new Date(submittedAt).getTime());
-    // Worst first: hidden text > critical > major > minor > age (older is worse).
-    const rank =
-      (hiddenText ? 0 : 1) * 1e15 +
-      (openCritical ? 0 : 1) * 1e14 +
-      (openMajor ? 0 : 1) * 1e13 +
-      (openMinor ? 0 : 1) * 1e12 +
-      Math.max(0, 1e12 - ageMs);
 
     rows.push({
       id: q.asset_id!,
@@ -553,7 +518,7 @@ export async function listAdsWith(db: Db, profileId: string, userId: string): Pr
       channel: q.channel,
       status,
       tab: tabForAsset({ status, liveAt: life.live_at, expiresAt: life.expires_at, archivedAt: life.archived_at }),
-      tags: tagsFor({
+      tags: adTags({
         status,
         versionNo: q.latest_version_no ?? 1,
         hasDecisions: decisions.length > 0,
@@ -597,7 +562,7 @@ export async function listAdsWith(db: Db, profileId: string, userId: string): Pr
       updatedAt: q.updated_at ?? submittedAt,
       isSample,
       seenIn: sourceIds.length,
-      rank,
+      rank: rankAd({ hiddenText, openCritical, openMajor, openMinor, submittedAt }, now),
     });
   }
 
@@ -990,7 +955,7 @@ export async function getAdDetailWith(db: Db, assetId: string, profileId: string
   }
   if (!asset || !asset.latest_version_id || asset.is_draft) return null;
 
-  const [versionsRes, runsRes, decisionsRes, changeRes, eventsRes, membersRes, sourcesRes, nextRes, rulesRes] = await Promise.all([
+  const [versionsRes, runsRes, decisionsRes, changeRes, eventsRes, membersRes, sourcesRes, nextNeedsReviewId, rulesRes] = await Promise.all([
     db
       .from("asset_versions")
       .select("id, version_no, origin, author_id, content, extracted_text, content_sha256, storage_path, created_at")
@@ -1012,14 +977,8 @@ export async function getAdDetailWith(db: Db, assetId: string, profileId: string
     db.from("events").select("id, kind, actor_id, data, created_at").eq("asset_id", assetId).order("created_at", { ascending: false }).limit(500),
     db.from("profile_members").select("user_id").eq("profile_id", profileId),
     db.from("asset_sources").select("source_item_id").eq("asset_id", assetId),
-    db
-      .from("asset_queue")
-      .select("asset_id, status, open_alert_count, open_critical, open_major, submitted_at, latest_version_id")
-      .eq("profile_id", profileId)
-      .eq("is_draft", false)
-      .neq("asset_id", assetId)
-      .in("status", [...NEEDS_REVIEW_STATUSES])
-      .limit(200),
+    // Next ad to open after a decision: worst first among Needs review.
+    getNextNeedsReviewIdWith(db, profileId, assetId),
     db.from("rules").select("id, code, current_version_id").eq("profile_id", profileId).eq("active", true).order("code", { ascending: true }),
   ]);
 
@@ -1283,18 +1242,6 @@ export async function getAdDetailWith(db: Db, assetId: string, profileId: string
     acknowledgedBy: label(a.acknowledged_by),
   }));
 
-  // Next ad to open after a decision: worst first among Needs review.
-  const next = (nextRes.data ?? [])
-    .map((q) => ({
-      id: q.asset_id!,
-      rank:
-        ((q.open_alert_count ?? 0) > 0 ? 0 : 1) * 1e15 +
-        ((q.open_critical ?? 0) > 0 ? 0 : 1) * 1e14 +
-        ((q.open_major ?? 0) > 0 ? 0 : 1) * 1e13 +
-        Math.max(0, 1e12 - (Date.now() - new Date(q.submitted_at ?? 0).getTime())),
-    }))
-    .sort((a, b) => a.rank - b.rank)[0];
-
   const fileUrl =
     latest.content.format === "pdf" || latest.content.format === "image" ? await signUrl(db, latest.storagePath, false) : null;
 
@@ -1349,7 +1296,7 @@ export async function getAdDetailWith(db: Db, assetId: string, profileId: string
       .reduce((acc, s) => acc + (s.active_seconds ?? 0), 0),
     memberCount: membersRes.data?.length ?? 1,
     seenIn: sourcesRes.data?.length ?? 0,
-    nextNeedsReviewId: next?.id ?? null,
+    nextNeedsReviewId,
     rulesInForce,
     now: Date.now(),
   };
@@ -1387,26 +1334,44 @@ export async function getNextNeedsReviewId(profileId: string, excludeAssetId: st
   return getNextNeedsReviewIdWith(await createClient(), profileId, excludeAssetId);
 }
 
+/**
+ * Ranked with rankAd, the list's own order. The database order puts every ad
+ * with hidden text first, then any critical, major and minor issue, then the
+ * oldest, so the 200 rows read hold the true top ad unless more than 200
+ * share its worst flag.
+ */
 export async function getNextNeedsReviewIdWith(db: Db, profileId: string, excludeAssetId: string): Promise<string | null> {
   const { data } = await db
     .from("asset_queue")
-    .select("asset_id, open_alert_count, open_critical, open_major, submitted_at")
+    .select("asset_id, open_alert_count, open_critical, open_major, open_minor, submitted_at, created_at")
     .eq("profile_id", profileId)
     .eq("is_draft", false)
     .neq("asset_id", excludeAssetId)
     .in("status", [...NEEDS_REVIEW_STATUSES])
+    .order("open_alert_count", { ascending: false, nullsFirst: false })
+    .order("open_critical", { ascending: false, nullsFirst: false })
+    .order("open_major", { ascending: false, nullsFirst: false })
+    .order("open_minor", { ascending: false, nullsFirst: false })
+    .order("submitted_at", { ascending: true })
+    .order("asset_id", { ascending: true })
     .limit(200);
-  const next = (data ?? [])
-    .map((q) => ({
-      id: q.asset_id!,
-      rank:
-        ((q.open_alert_count ?? 0) > 0 ? 0 : 1) * 1e15 +
-        ((q.open_critical ?? 0) > 0 ? 0 : 1) * 1e14 +
-        ((q.open_major ?? 0) > 0 ? 0 : 1) * 1e13 +
-        Math.max(0, 1e12 - (Date.now() - new Date(q.submitted_at ?? 0).getTime())),
-    }))
-    .sort((a, b) => a.rank - b.rank)[0];
-  return next?.id ?? null;
+  const now = Date.now();
+  let best: { id: string; rank: number } | null = null;
+  for (const q of data ?? []) {
+    if (!q.asset_id) continue;
+    const rank = rankAd(
+      {
+        hiddenText: (q.open_alert_count ?? 0) > 0,
+        openCritical: q.open_critical ?? 0,
+        openMajor: q.open_major ?? 0,
+        openMinor: q.open_minor ?? 0,
+        submittedAt: q.submitted_at ?? q.created_at ?? new Date(0).toISOString(),
+      },
+      now,
+    );
+    if (!best || rank < best.rank) best = { id: q.asset_id, rank };
+  }
+  return best?.id ?? null;
 }
 
 /**

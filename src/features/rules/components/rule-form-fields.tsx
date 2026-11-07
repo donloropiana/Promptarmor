@@ -5,10 +5,8 @@ import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { PRODUCT_LABELS, RULE_APPLIES_TO, SEVERITIES } from "@/features/rules/labels";
-import type { Severity } from "@/features/ads/types";
-
-import { SEVERITY_LABELS } from "./severity";
+import { APPLIES_TO_LABELS, RULE_APPLIES_TO } from "@/features/rules/labels";
+import { SEVERITIES, SEVERITY_LABELS, type Severity } from "@/features/rules/severity";
 
 /** Shared fields for Edit rule and Add rule. */
 export type RuleFormValues = {
@@ -98,9 +96,9 @@ export function RuleFormFields({
                     checked={checked || (p !== "all" && values.appliesTo.includes("all"))}
                     disabled={disabled}
                     onCheckedChange={(c) => toggleProduct(p, c === true)}
-                    aria-label={PRODUCT_LABELS[p] ?? p}
+                    aria-label={APPLIES_TO_LABELS[p] ?? p}
                   />
-                  <span className={disabled ? "text-muted-foreground" : undefined}>{PRODUCT_LABELS[p] ?? p}</span>
+                  <span className={disabled ? "text-muted-foreground" : undefined}>{APPLIES_TO_LABELS[p] ?? p}</span>
                 </label>
               );
             })}

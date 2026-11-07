@@ -9,7 +9,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { AdFinding, AdVersion } from "@/features/ads/server/queries";
 
 import { AddIssueDialog, readAdSelection, type AdSelection, type PinRegion, type RuleOption } from "./add-issue";
-import { channelLabel } from "@/features/ads/format";
+import { channelLabel } from "@/features/ads/domain";
 
 export type Mark = { id: string; start: number; end: number; severity: AdFinding["severity"] };
 

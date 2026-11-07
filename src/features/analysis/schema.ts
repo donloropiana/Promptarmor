@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import type { Severity } from "@/features/ads/types";
+import { SEVERITIES, type Severity } from "@/features/rules/severity";
 
 /**
  * Zod schemas for the structured check output and the shared finding shape.
@@ -8,7 +8,6 @@ import type { Severity } from "@/features/ads/types";
  * provider stays strict (every key required, null allowed).
  */
 
-export const SEVERITIES = ["critical", "major", "minor"] as const satisfies readonly Severity[];
 export const EVIDENCE_TYPES = ["exact_match", "offer_mismatch", "missing_disclosure", "needs_judgment"] as const;
 export const HIDDEN_KINDS = ["hidden_text", "possible_injection"] as const;
 

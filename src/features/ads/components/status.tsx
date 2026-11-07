@@ -4,7 +4,7 @@ import { cn } from "cn";
 import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
 
-import { statusWord } from "@/features/ads/format";
+import { statusWord } from "@/features/ads/domain";
 
 const STATUS_ICON = {
   "Needs review": CircleDashed,

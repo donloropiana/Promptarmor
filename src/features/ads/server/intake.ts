@@ -7,7 +7,8 @@ import { SAMPLE_ADS } from "@/features/ads/samples";
 import { requireSupabaseAdminClient } from "@/lib/supabase/admin";
 import { downloadObject, uploadVersionBytes } from "@/lib/supabase/storage";
 import type { Database, Json, TablesInsert } from "@/lib/supabase/types";
-import type { AdFile, Product, SampleKey, VersionContent } from "@/features/ads/types";
+import type { AdFile, SampleKey, VersionContent } from "@/features/ads/types";
+import { asProduct, isProductType, type Product } from "@/features/products/catalog";
 
 import { extractFromHtml, extractFromText, extractPdf, type ExtractedDocument } from "@/features/analysis/extract";
 import { normalizedTextHash, sha256Hex } from "@/features/analysis/hash";
@@ -374,7 +375,7 @@ export async function addVersion(input: {
     authorId,
     built,
     meta: {
-      product: (asset.product as Product) ?? "unknown",
+      product: asProduct(asset.product),
       channel: asset.channel ?? undefined,
       inferred: false,
       ...(input.note ? { note: input.note.slice(0, 500) } : {}),
@@ -532,10 +533,7 @@ export async function acceptSourceItem(input: { sourceItemId: string; userId: st
 
   const inferred = (item.inferred ?? {}) as { product?: string; channel?: string | null };
   const textForInference = built.extractedText || "";
-  const product: Product =
-    inferred.product && inferred.product !== "unknown" && ["personal_loan", "credit_card", "mortgage", "other"].includes(inferred.product)
-      ? (inferred.product as Product)
-      : inferProduct(textForInference);
+  const product: Product = isProductType(inferred.product) ? inferred.product : inferProduct(textForInference);
   const channel = inferred.channel || (item.kind === "email" ? "email" : inferChannel({ text: textForInference, html: built.content.html, filename: item.title, mimeType: item.mime_type }));
   const title = inferTitle({ title: item.title, text: textForInference, filename: built.filename });
 

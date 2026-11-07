@@ -4,7 +4,8 @@ import { cache } from "react";
 
 import { requireMember, type Membership } from "@/features/auth/server/dal";
 import type { Json } from "@/lib/supabase/types";
-import type { Product, Severity } from "@/features/ads/types";
+import { asProduct, type Product } from "@/features/products/catalog";
+import { asSeverity, type Severity } from "@/features/rules/severity";
 
 /**
  * Read model for the Rules page (Rules | Products tabs). Every read goes
@@ -13,10 +14,7 @@ import type { Product, Severity } from "@/features/ads/types";
  * <Suspense>.
  */
 
-import { PRODUCT_LABELS, RULE_APPLIES_TO, RULE_KIND_LABELS, SEVERITIES, type RuleKind } from "@/features/rules/labels";
-
-export { PRODUCT_LABELS, RULE_APPLIES_TO, RULE_KIND_LABELS, SEVERITIES };
-export type { RuleKind };
+import type { RuleKind } from "@/features/rules/labels";
 
 export type Reference = {
   id: string;
@@ -79,14 +77,8 @@ export type WorkspaceOffer = {
   versions: OfferVersion[];
 };
 
-function sev(v: unknown): Severity {
-  return v === "critical" || v === "major" || v === "minor" ? v : "minor";
-}
 function kind(v: unknown): RuleKind {
   return v === "regulatory" || v === "policy" || v === "offer" || v === "security" ? v : "policy";
-}
-function product(v: unknown): Product {
-  return v === "personal_loan" || v === "credit_card" || v === "mortgage" || v === "other" ? v : "unknown";
 }
 function termsOf(v: Json): OfferTerms {
   return v && typeof v === "object" && !Array.isArray(v) ? (v as OfferTerms) : {};
@@ -199,7 +191,7 @@ export const getWorkspaceRules = cache(async (profileId: string): Promise<Worksp
     versionNo: v.version_no,
     title: v.title,
     body: v.body,
-    defaultSeverity: sev(v.default_severity),
+    defaultSeverity: asSeverity(v.default_severity),
     appliesTo: v.applies_to ?? [],
     referenceIds: v.reference_ids ?? [],
     reason: v.reason,
@@ -271,7 +263,7 @@ export async function getRuleVersions(profileId: string, ruleId: string): Promis
     versionNo: v.version_no,
     title: v.title,
     body: v.body,
-    defaultSeverity: sev(v.default_severity),
+    defaultSeverity: asSeverity(v.default_severity),
     appliesTo: v.applies_to ?? [],
     referenceIds: v.reference_ids ?? [],
     reason: v.reason,
@@ -363,7 +355,7 @@ export const getWorkspaceOffers = cache(async (profileId: string): Promise<Works
     out.push({
       id: o.id,
       code: o.code,
-      product: product(o.product),
+      product: asProduct(o.product),
       name: o.name,
       active: o.active,
       current: list[0],
