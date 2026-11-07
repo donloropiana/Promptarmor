@@ -19,6 +19,20 @@ export function timeAgo(iso: string | null | undefined, now: number = Date.now()
   return shortDate(iso);
 }
 
+
+/**
+ * Formats from Intl parts with a fixed en-US pattern so Bun/Node on the server
+ * and every browser print identical text ("Nov 6, 2026, 8:24 PM"); some ICU
+ * builds otherwise insert "at" and cause hydration mismatches.
+ */
+function fmtParts(d: Date, o: Intl.DateTimeFormatOptions): string {
+  const parts = new Intl.DateTimeFormat("en-US", o).formatToParts(d);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  const date = `${get("month")} ${get("day")}${get("year") ? `, ${get("year")}` : ""}`;
+  if (!o.hour) return date;
+  return `${date}, ${get("hour")}:${get("minute")} ${get("dayPeriod")}`.replace(/\s+/g, " ").trim();
+}
+
 const DATE_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 /**
@@ -38,7 +52,7 @@ export function shortDate(iso: string | null | undefined): string {
   if (!iso) return "—";
   const d = toDate(iso);
   if (!d) return "—";
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  return fmtParts(d, { month: "short", day: "numeric", year: "numeric" });
 }
 
 /** "Nov 6, 2026, 3:04 PM". */
@@ -46,12 +60,13 @@ export function dateTime(iso: string | null | undefined): string {
   if (!iso) return "—";
   const t = Date.parse(iso);
   if (!Number.isFinite(t)) return "—";
-  return new Date(t).toLocaleString(undefined, {
+  return fmtParts(new Date(t), {
     month: "short",
     day: "numeric",
     year: "numeric",
     hour: "numeric",
     minute: "2-digit",
+    hour12: true,
   });
 }
 

@@ -121,7 +121,7 @@ export async function sendEmailCode(
     ok: true,
     step: "code",
     email,
-    message: `We emailed a sign-in link and a 6-digit code to ${email}.`,
+    message: `We emailed a sign-in link to ${email}. Open it on this device to finish.`,
   };
 }
 
@@ -204,7 +204,7 @@ export async function signUpWithPassword(
     ok: true,
     step: "code",
     email: email.data,
-    message: `Check ${email.data} for a confirmation link or 6-digit code.`,
+    message: `Check ${email.data} for a confirmation link and open it on this device.`,
   };
 }
 

@@ -150,10 +150,10 @@ function EmailOtpPanel({ next }: { next: string }) {
             defaultValue={sendState?.email ?? ""}
             placeholder="you@company.com"
           />
-          <FieldDescription>We&apos;ll email you a sign-in link and a 6-digit code.</FieldDescription>
+          <FieldDescription>We&apos;ll email you a sign-in link. Open it on this device.</FieldDescription>
         </Field>
         {sendState && !sendState.ok ? <FormMessage state={sendState} /> : null}
-        <SubmitButton pending={sending}>Email me a link and code</SubmitButton>
+        <SubmitButton pending={sending}>Email me a sign-in link</SubmitButton>
       </FieldGroup>
     </form>
   );
@@ -168,7 +168,7 @@ function CodeForm({ email, next }: { email: string; next: string }) {
       <input type="hidden" name="next" value={next} />
       <FieldGroup className="gap-3">
         <Field>
-          <FieldLabel htmlFor={`code-${email}`}>6-digit code</FieldLabel>
+          <FieldLabel htmlFor={`code-${email}`}>Got a code in the email? Enter it here</FieldLabel>
           <Input
             id={`code-${email}`}
             name="token"
