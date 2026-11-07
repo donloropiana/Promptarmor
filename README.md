@@ -85,7 +85,7 @@ Longer version: [docs/security.md](docs/security.md).
 - **Webhooks** from Nango are verified with HMAC-SHA256 over the raw body against a separate signing key, and replayed bodies are ignored (`webhook_receipts`).
 - **Write-once storage.** Version bytes go to a private bucket under a fresh UUID path with `upsert: false`; a unique index stops two versions sharing an object.
 - **HTML creative is sandboxed.** Rendered only in `<iframe sandbox srcdoc>` with a CSP of `default-src 'none'`: no scripts, no network, no forms.
-- **Auth** is Supabase Auth only (emailed link, or password with email confirmation). Invitations are bound to a verified email and a hashed one-time token.
+- **Auth** is Supabase Auth only (emailed link, or password with email confirmation). Invitations are bound to a verified email and a hashed one-time token. The session cookie is `httpOnly` (no browser Supabase client exists; every write is a Server Action or a same-origin route), and every response carries `X-Frame-Options: DENY`, `frame-ancestors 'none'`, `nosniff` and a strict referrer policy.
 
 ## Cost policy
 
@@ -95,7 +95,7 @@ Longer version, with the per-mode table and prices: [docs/ai-policy.md](docs/ai-
 - **No model calls outside production.** `AI_MODE` (`lib/ai/mode.ts`) is `live` only when `VERCEL_ENV=production`; everywhere else it defaults to `off`, where every check still completes with the deterministic product-terms and hidden-text findings and says "AI check skipped (test mode)". `replay` uses recorded model output from `fixtures/recorded/` matched by the ad text's hash, at $0. Every model call checks the mode first, so a test can never spend by accident.
 - **Identical content is never re-checked.** Each run computes `reuse_key` = sha256(normalized text, rule version ids, product version ids, prompt hash); a previous complete run with the same key in the workspace has its findings copied at $0, in every mode ("Reused an earlier identical check" in the history). Byte-identical re-submissions of the same ad are refused outright (`PT409`).
 - **Prompt caching.** The constant part of the check prompt (template, rules, product terms) sits before an Anthropic cache breakpoint; cache read and write tokens are priced separately and recorded per run.
-- **Hard caps in the database:** $10 per UTC day across all workspaces, $3 per workspace by default (ClearPath: $5, trusted), a $5 shared pool for untrusted workspaces and $3 per creator. Reservations are estimated from characters, settled with real tokens, and released on failure. The Ads list shows "AI spend today vs cap" and a banner at 80%. A spend limit on the AI Gateway key in the Vercel dashboard is the intended second fence; nothing in the repo depends on it.
+- **Hard caps in the database:** $10 per UTC day across all workspaces, $3 per workspace by default (ClearPath: $5, trusted), a $5 shared pool for untrusted workspaces and $3 per creator. Reservations are estimated from characters, settled with real tokens, and released on failure. The Ads list shows "AI spend today vs cap" and a banner at 80%. The AI Gateway key itself is capped at $2 per day on Vercel's side; that is the hard ceiling, and nothing in the repo depends on it.
 - **Cents per check**, shown per run on the ad page (model, tokens, cost) and on the Approved record. `/api/health` reports the mode and check model in use to a signed-in user.
 
 ## Architecture
@@ -168,7 +168,7 @@ cp .env.example .env.local                    # names only; values live in Doppl
 doppler run -p promptarmor -c prd -- bun run dev   # or fill .env.local and `bun run dev`
 ```
 
-Env names (see `.env.example`): `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `SUPABASE_JWKS_URL`, `NANGO_SECRET_KEY`, `NANGO_WEBHOOK_SIGNING_KEY`, `CRON_SECRET`, `NEXT_PUBLIC_SITE_URL`; optionally `AI_GATEWAY_API_KEY` (on Vercel the gateway uses OIDC), `AI_MODE` (`live` | `off` | `replay`; defaults to `off` outside production, so local work never spends) and `AI_CHECK_MODEL`.
+Env names (see `.env.example`): `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `SUPABASE_JWKS_URL`, `NANGO_SECRET_KEY`, `NANGO_WEBHOOK_SIGNING_KEY`, `CRON_SECRET`, `NEXT_PUBLIC_SITE_URL`; optionally `AI_GATEWAY_API_KEY` (only read when `AI_MODE` is not `off`), `AI_MODE` (`live` | `off` | `replay`; defaults to `off` outside production, so local work never spends) and `AI_CHECK_MODEL`.
 
 Checks and scripts:
 
@@ -188,8 +188,16 @@ AI_MODE=live doppler run -p promptarmor -c prd -- bun --conditions=react-server 
 # Record one live check per fixture and sample into fixtures/recorded/ (the only scripted spend)
 AI_MODE=live doppler run -p promptarmor -c prd -- bun --conditions=react-server scripts/record-fixtures.ts --dry-run
 
-# Browser smoke test against a running dev server (Playwright)
-SMOKE_PASSWORD=... SMOKE_BASE_URL=http://localhost:3000 bun scripts/smoke.ts
+# Hidden-text scanner known-answer tests (86 cases, no network)
+bun scripts/test-hidden-text.ts
+
+# Browser suites against a running dev server (Playwright; the account must be a workspace owner)
+SMOKE_EMAIL=... SMOKE_PASSWORD=... SMOKE_BASE_URL=http://localhost:3000 bun scripts/smoke.ts        # 45 checks, every screen
+SMOKE_EMAIL=... SMOKE_PASSWORD=... VERIFY_BASE_URL=http://localhost:3000 bun scripts/verify-ads.ts   # Ads list + ad page flows; --stress adds worst-case data
+SMOKE_EMAIL=... SMOKE_PASSWORD=... VERIFY_BASE_URL=http://localhost:3000 bun scripts/verify-shell.ts # shell, Rules, Products, Settings, invitations
+
+# Worst-case ads for the stress run (idempotent; --list, --retire, --no-check, --no-bulk)
+doppler run -p promptarmor -c prd -- bun --conditions=react-server scripts/stress-ads.ts
 
 # Retire test ads in a workspace ("[test] " titles or sample audience, not approved)
 doppler run -p promptarmor -c prd -- bun scripts/cleanup-workspace.ts <profile-id> --dry-run
@@ -203,7 +211,7 @@ The database is the live Supabase project; migrations in `supabase/migrations/` 
 app/
   (app)/ads, ads/[id], rules, settings/*, new-workspace   the four screens
   (auth)/signin, reset-password, invite/[token]           chromeless auth pages
-  api/health, api/cron/*, api/nango/webhook, api/connections/*
+  api/health, api/cron/*, api/nango/webhook, api/connections/*, api/review-session
 components/ads, rules, settings, shell, connections, ui   UI (shadcn/ui under ui/)
 lib/
   ai/        engine, analyze, prompts, hidden-text, offer-checks, spans, recheck, budget, chat
@@ -217,8 +225,9 @@ lib/
   types/     shared ad/version/finding types
 supabase/migrations/   six migrations (schema, RLS, RPCs, storage)
 fixtures/              20 known-answer ads for scripts/eval.ts; recorded/ holds replayable model output
-scripts/               seed-starter, eval, record-fixtures, smoke, cleanup-workspace
-docs/                  HANDOFF, PROGRESS, ui-spec, schema, security, architecture, ai-policy,
-                       demo-script, rules-rationale, nango, setup, research/
+scripts/               seed-starter, eval, record-fixtures, test-hidden-text, smoke, verify-ads,
+                       verify-shell, stress-ads, cleanup-workspace
+docs/                  HANDOFF, PROGRESS, ui-spec, schema, security, security-review, spec-audit,
+                       architecture, ai-policy, demo-script, rules-rationale, nango, setup, research/
 mockup/                the earlier clickable prototype (reference only)
 ```

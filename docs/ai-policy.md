@@ -8,7 +8,7 @@ How the product decides whether to call a model, which model, and how it avoids 
 2. **No AI spend outside production.** `AI_MODE` decides whether a model may be called at all. Unset, it is `live` only when `VERCEL_ENV=production`; everywhere else (laptop, preview deployments, scripts) it is `off`. In `off` and `replay` no model call is ever made and no budget is reserved. Every `generateText` in the codebase sits behind `assertModelCallsAllowed()` (lib/ai/mode.ts), so a script cannot spend by accident.
 3. **Identical content is never re-checked.** Before any model call the engine computes a reuse key and copies the findings of an earlier identical check at $0 (see Reuse).
 4. **The constant part of the prompt is cached.** Instructions + the product's rules + product terms are one cacheable system message; the ad text is outside the cache. Cached reads and writes are priced and recorded.
-5. **Every live call is budgeted.** `reserve_ai_budget` before, `settle_ai_budget` after (or `release_ai_budget` when nothing was called), $10/day global and a per-workspace cap in the database (docs/schema.md §4).
+5. **Every live call is budgeted.** `reserve_ai_budget` before, `settle_ai_budget` after (or `release_ai_budget` when nothing was called), $10/day global and a per-workspace cap in the database (docs/schema.md §4). The gateway key itself is capped at $2/day on Vercel's side, so that is the hard ceiling whatever the database allows.
 
 ## AI_MODE
 

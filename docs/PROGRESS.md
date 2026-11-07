@@ -1,11 +1,13 @@
 # Progress log
 
-Active run: 2026-11-07T05:00Z (local session on Max's laptop; it refreshes this line with every push. Cloud runs: skip while it is less than 50 minutes old)
+Active run: 2026-11-07T05:15Z (local session on Max's laptop; it refreshes this line with every push. Cloud runs: skip while it is less than 50 minutes old)
 
 Read `docs/HANDOFF.md` first. Newest entries at the bottom. Keep entries short and factual.
 
 ## Needs Max in the morning
-- (filled in by runs; if empty, nothing is blocked on him)
+1. Add a credit card to the Vercel team so the AI Gateway serves model calls: https://vercel.com/midnightmusicgroups-projects/~/ai?modal=add-credit-card (the key in use is `promptarmor-demo`, capped at $2/day). Then tell the session: it records fixtures once (~$0.05), runs the live eval for the README numbers and verifies one live check + Ask on production.
+2. Optional: paste the two email templates from docs/setup.md into Supabase -> Auth -> Email Templates (6-digit code in the email, links that work on another device).
+3. Decide the demo login to hand graders: the reviewer account (owner of ClearPath) or an invitation from Settings -> Members.
 
 ## State at handoff (2026-11-07T00:50Z)
 - Pushed all local work to `main` (auth, Nango, connectors, migrations, docs, mockup, skills).
