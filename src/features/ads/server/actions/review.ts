@@ -7,7 +7,7 @@ import { SIGNED_OUT, invalid, type ActionResult } from "@/lib/action-result";
 import { visibleLength } from "@/features/analysis/infer";
 import { locateQuote, spanHash } from "@/features/analysis/spans";
 import { getCurrentUser } from "@/features/auth/server/dal";
-import { getNextNeedsReviewId } from "@/features/ads/server/queries";
+import { getNextNeedsReviewId } from "@/features/ads/server/queries/next-ad";
 import { MAX_IMAGE_LABEL_CHARS } from "@/features/ads/types";
 import { requireSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";

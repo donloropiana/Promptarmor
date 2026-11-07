@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 
-import type { AdFinding } from "@/features/ads/server/queries";
+import type { AdFinding } from "@/features/ads/server/queries/detail";
 
 import { NO_DIALOGS, type DecisionDialogs } from "../decision-bar";
 import { isTypingTarget } from "../shortcuts-dialog";

@@ -10,7 +10,7 @@ import { LocalDateTime } from "@/features/ads/components/local-time";
 import { LongText } from "@/features/ads/components/long-text";
 import { formatDuration, formatUsd, relativeTime, shortSha } from "@/features/ads/format";
 import { simulateRevision } from "@/features/ads/server/actions/versions";
-import type { AdDecision, AdDetail } from "@/features/ads/server/queries";
+import type { AdDecision, AdDetail } from "@/features/ads/server/queries/detail";
 
 /**
  * The review column's cards for where the ad stands in its review: the

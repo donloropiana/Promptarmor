@@ -5,7 +5,7 @@ import { ExternalLink, FileText, Pencil, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { channelLabel } from "@/features/ads/domain";
-import type { AdVersion } from "@/features/ads/server/queries";
+import type { AdVersion } from "@/features/ads/server/queries/detail";
 
 import type { CreativeViewMode } from "../creative-view";
 

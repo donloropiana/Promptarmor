@@ -3,7 +3,7 @@
 import { cn } from "cn";
 import { useMemo } from "react";
 
-import type { AdVersion } from "@/features/ads/server/queries";
+import type { AdVersion } from "@/features/ads/server/queries/detail";
 
 import { MarkedText, type Mark } from "./marked-text";
 

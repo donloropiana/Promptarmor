@@ -4,7 +4,7 @@ import { useCallback, useMemo, useState } from "react";
 
 import { AutoRefresh } from "@/features/ads/components/auto-refresh";
 import { APPROVED_STATUSES, isLive } from "@/features/ads/domain";
-import type { AdDetail } from "@/features/ads/server/queries";
+import type { AdDetail } from "@/features/ads/server/queries/detail";
 
 import { CheckStatus } from "./ad-page/check-status";
 import { AdColumns } from "./ad-page/columns";

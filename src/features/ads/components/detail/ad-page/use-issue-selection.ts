@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 
-import type { AdFinding } from "@/features/ads/server/queries";
+import type { AdFinding } from "@/features/ads/server/queries/detail";
 import type { VersionContent } from "@/features/ads/types";
 
 import type { CreativeViewMode } from "../creative-view";

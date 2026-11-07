@@ -8,7 +8,7 @@ import { useLocalDateTime } from "@/features/ads/components/local-time";
 import { ReasonTags, StatusWord } from "@/features/ads/components/status";
 import { adTags, isNotScreened } from "@/features/ads/domain";
 import { relativeTime, shortSha } from "@/features/ads/format";
-import type { AdDetail } from "@/features/ads/server/queries";
+import type { AdDetail } from "@/features/ads/server/queries/detail";
 
 import { MetaChips } from "../meta-chips";
 

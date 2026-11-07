@@ -9,7 +9,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatedUl } from "@/components/ui/animated-list";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
-import type { AdListRow, SkippedRow, TriageRow } from "@/features/ads/server/queries";
+import type { AdListRow, SkippedRow, TriageRow } from "@/features/ads/server/queries/list";
 
 import { AdRow } from "./ad-row";
 import { AutoRefresh } from "@/features/ads/components/auto-refresh";

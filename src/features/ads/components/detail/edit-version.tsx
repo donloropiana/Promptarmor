@@ -13,7 +13,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { addReviewerVersion } from "@/features/ads/server/actions/versions";
-import type { AdVersion } from "@/features/ads/server/queries";
+import type { AdVersion } from "@/features/ads/server/queries/detail";
 import { visibleLength } from "@/features/analysis/infer";
 
 import { ACCEPT } from "@/features/ads/components/list/uploader";

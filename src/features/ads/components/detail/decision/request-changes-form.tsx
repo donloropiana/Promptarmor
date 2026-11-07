@@ -11,7 +11,7 @@ import { SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/compon
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { decide, type DecideResult } from "@/features/ads/server/actions/review";
-import type { AdDetail, AdFinding } from "@/features/ads/server/queries";
+import type { AdDetail, AdFinding } from "@/features/ads/server/queries/detail";
 
 import { severityLabel } from "@/features/rules/severity";
 import { issueTitle } from "../issues-panel";

@@ -13,7 +13,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { applySuggestion } from "@/features/ads/server/actions/versions";
 import { dispositionFinding } from "@/features/ads/server/actions/review";
-import type { AdFinding } from "@/features/ads/server/queries";
+import type { AdFinding } from "@/features/ads/server/queries/detail";
 
 import { severityLabel, type Severity } from "@/features/rules/severity";
 import { LongText } from "@/features/ads/components/long-text";

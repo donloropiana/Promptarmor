@@ -3,7 +3,7 @@
 import { FileText, Image as ImageIcon } from "lucide-react";
 import { useEffect, useMemo, useRef } from "react";
 
-import type { AdFinding, AdVersion } from "@/features/ads/server/queries";
+import type { AdFinding, AdVersion } from "@/features/ads/server/queries/detail";
 
 import { AddIssueDialog, type RuleOption } from "./add-issue";
 import { FloatingAddIssue, useAddIssueFlow } from "./creative/add-issue-flow";

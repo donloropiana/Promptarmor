@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import type { AdDetail } from "@/features/ads/server/queries";
+import type { AdDetail } from "@/features/ads/server/queries/detail";
 
 import { IssuesPanel, issueTitle } from "../issues-panel";
 import { ChangeSummaryLine, type ChangeSummary } from "../what-changed";

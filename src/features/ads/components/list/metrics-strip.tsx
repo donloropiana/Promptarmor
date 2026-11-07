@@ -2,7 +2,7 @@ import { AlertCircle, Unplug } from "lucide-react";
 import Link from "next/link";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import type { AdsMetrics, AdsSummary } from "@/features/ads/server/queries";
+import type { AdsMetrics, AdsSummary } from "@/features/ads/server/queries/metrics";
 
 import { formatUsd, pluralise, providerName, relativeTime } from "@/features/ads/format";
 

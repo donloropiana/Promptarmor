@@ -2,7 +2,7 @@
 
 import { cn } from "cn";
 
-import type { AdFinding } from "@/features/ads/server/queries";
+import type { AdFinding } from "@/features/ads/server/queries/detail";
 
 import type { PinRegion } from "../add-issue";
 

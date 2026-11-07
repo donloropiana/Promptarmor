@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { markLive, setExpiry, unarchiveAd } from "@/features/ads/server/actions/lifecycle";
-import type { AdDetail } from "@/features/ads/server/queries";
+import type { AdDetail } from "@/features/ads/server/queries/detail";
 
 import { LIVE_CHANNELS, isLive } from "@/features/ads/domain";
 import { formatDate, lifecycleLine } from "@/features/ads/format";

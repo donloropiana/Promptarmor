@@ -3,7 +3,7 @@
 import { cn } from "cn";
 import { useMemo } from "react";
 
-import type { AdFinding } from "@/features/ads/server/queries";
+import type { AdFinding } from "@/features/ads/server/queries/detail";
 
 /**
  * Highlighted ad text: which words each issue quotes (its anchor, or a search

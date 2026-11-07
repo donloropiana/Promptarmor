@@ -4,7 +4,7 @@ import { FlaskConical, Recycle, ShieldOff } from "lucide-react";
 
 import { Spinner } from "@/components/ui/spinner";
 import { formatUsd, relativeTime, stageLabel } from "@/features/ads/format";
-import type { AdDetail } from "@/features/ads/server/queries";
+import type { AdDetail } from "@/features/ads/server/queries/detail";
 
 /**
  * One card that says how this version was checked. Reads the run's mode

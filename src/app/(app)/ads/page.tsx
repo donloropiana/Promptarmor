@@ -9,7 +9,9 @@ import { Banners, MetricsStrip, SummaryLine } from "@/features/ads/components/li
 import { AdsListSkeleton } from "@/features/ads/components/skeletons";
 import { DropBar, WindowDropOverlay } from "@/features/ads/components/list/uploader";
 import { getActiveProfile, requireUser } from "@/features/auth/server/dal";
-import { getAdsMetrics, getAdsSummary, listAds, nudgeStaleRunsAfter } from "@/features/ads/server/queries";
+import { getAdsMetrics, getAdsSummary } from "@/features/ads/server/queries/metrics";
+import { listAds } from "@/features/ads/server/queries/list";
+import { nudgeStaleRunsAfter } from "@/features/ads/server/queries/nudge";
 import { expireLapsedAds } from "@/features/ads/server/lifecycle";
 import { SAMPLE_ADS, SAMPLE_CHIPS } from "@/features/ads/samples";
 

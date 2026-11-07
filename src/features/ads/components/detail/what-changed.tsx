@@ -4,7 +4,7 @@ import { diffWords } from "diff";
 import { cn } from "cn";
 import { useMemo } from "react";
 
-import type { AdFinding, AdVersion } from "@/features/ads/server/queries";
+import type { AdFinding, AdVersion } from "@/features/ads/server/queries/detail";
 
 export type RecheckLabel = "Fixed" | "Still there" | "New";
 

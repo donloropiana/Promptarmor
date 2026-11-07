@@ -5,7 +5,8 @@ import { Suspense } from "react";
 import { AdPage } from "@/features/ads/components/detail/ad-page";
 import { AdPageSkeleton } from "@/features/ads/components/skeletons";
 import { getActiveProfile, requireUser } from "@/features/auth/server/dal";
-import { getAdDetail, nudgeStaleRunsAfter } from "@/features/ads/server/queries";
+import { getAdDetail } from "@/features/ads/server/queries/detail";
+import { nudgeStaleRunsAfter } from "@/features/ads/server/queries/nudge";
 
 export const metadata: Metadata = { title: "Ad · Marketing Compliance Workbench" };
 // Reads the session (see src/app/(app)/layout.tsx), so it blocks on the server by design.

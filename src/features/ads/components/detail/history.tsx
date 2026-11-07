@@ -5,7 +5,7 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import type { AdDecision, AdDetail, AdEvent, AdRun } from "@/features/ads/server/queries";
+import type { AdDecision, AdDetail, AdEvent, AdRun } from "@/features/ads/server/queries/detail";
 
 import { liveChannelLabel, statusWord } from "@/features/ads/domain";
 import { formatDate, formatDuration, formatUsd, shortSha } from "@/features/ads/format";

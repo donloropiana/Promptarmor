@@ -26,7 +26,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { removeAd, restoreAd } from "@/features/ads/server/actions/remove";
-import type { AdListRow, ThumbIcon } from "@/features/ads/server/queries";
+import type { AdListRow, ThumbIcon } from "@/features/ads/server/queries/list";
 
 import { lifecycleLine, relativeTime } from "@/features/ads/format";
 import { useLocalDateTime } from "@/features/ads/components/local-time";

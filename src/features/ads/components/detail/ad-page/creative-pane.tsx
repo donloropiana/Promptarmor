@@ -3,7 +3,7 @@
 import type { ComponentProps } from "react";
 
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import type { AdDetail } from "@/features/ads/server/queries";
+import type { AdDetail } from "@/features/ads/server/queries/detail";
 
 import { CreativeView, type CreativeViewMode } from "../creative-view";
 import { WordDiff } from "../what-changed";

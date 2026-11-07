@@ -12,7 +12,7 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { simulateRevision } from "@/features/ads/server/actions/versions";
 import { unarchiveAd } from "@/features/ads/server/actions/lifecycle";
 import { type DecideResult } from "@/features/ads/server/actions/review";
-import type { AdDetail } from "@/features/ads/server/queries";
+import type { AdDetail } from "@/features/ads/server/queries/detail";
 
 import { APPROVED_STATUSES, ARCHIVABLE_STATUSES } from "@/features/ads/domain";
 import { formatDate } from "@/features/ads/format";
