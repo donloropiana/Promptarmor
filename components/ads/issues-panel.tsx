@@ -35,6 +35,7 @@ const EVIDENCE_TITLES: Record<string, string> = {
 export function issueTitle(f: AdFinding): string {
   if (f.rule) return f.rule.title;
   if (f.origin === "reviewer") return "Reviewer-added issue";
+  if (f.origin === "ai") return "Worth a look (not a rule yet)";
   return EVIDENCE_TITLES[f.evidenceType] ?? "Issue";
 }
 

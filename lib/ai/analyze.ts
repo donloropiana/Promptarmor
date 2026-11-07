@@ -132,7 +132,9 @@ export function hiddenTextFindings(hidden: HiddenTextCandidate[], rules: RuleInp
 /** Applies each rule's default severity when the model deviated without a strong reason (keeps the model's choice when stricter). */
 function clampSeverity(f: ContentFinding, rules: RuleInput[]): ContentFinding {
   const rule = rules.find((r) => r.code.trim().toUpperCase() === f.rule_code.trim().toUpperCase());
-  if (!rule) return f;
+  // A concern outside the rulebook ("UNLISTED", or a code the model made up) is
+  // worth a look, never a rule finding: Minor, so it is listed but blocks nothing.
+  if (!rule) return { ...f, rule_code: "UNLISTED", severity: "minor" as Severity, evidence_type: "needs_judgment" as const };
   // Allow one step either way; a two-step jump down is usually the model being lenient.
   const want = SEVERITY_RANK[rule.default_severity];
   const got = SEVERITY_RANK[f.severity];

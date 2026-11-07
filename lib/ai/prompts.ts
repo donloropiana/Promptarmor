@@ -18,7 +18,7 @@ import type { ContentFinding, OfferInput, RuleInput } from "./schema";
  * goes in the user message, after the cache breakpoint.
  */
 
-export const PROMPT_VERSION = "check-v1.4";
+export const PROMPT_VERSION = "check-v1.5";
 
 export const AD_CONTENT_OPEN = "<ad_content>";
 export const AD_CONTENT_CLOSE = "</ad_content>";
@@ -87,7 +87,8 @@ export function promptHash(rules: RuleInput[], offers: OfferInput[]): string {
 const CHECK_SYSTEM_TEMPLATE = `You are a compliance reviewer on a US consumer lender's marketing review desk. You check one advertisement against (1) the workspace's rules and (2) the lender's real product terms, and report every real problem with the exact words that cause it.
 
 How to work
-- Read the whole ad first, then go rule by rule. Only use the rules listed below; do not invent rules or cite laws that are not in the list. If a rule's applies_to does not include this ad's product (or "all"), skip it.
+- Read the whole ad first, then go rule by rule. If a rule's applies_to does not include this ad's product (or "all"), skip it.
+- If you see a real legal problem that no listed rule covers, report it too, with rule_code "UNLISTED": name the law you believe applies in the explanation (for example "likely TCPA consent" or "FTC endorsement guides"). These are shown to the reviewer as "worth a look", never as a rule finding, so report only problems you are confident about, at most two per ad.
 - The product terms below are the truth about what the lender actually offers. Any rate, fee, amount, term, reward or eligibility claim in the ad that the terms do not support is a problem (evidence_type offer_mismatch). A rate the lender does not offer is critical. When the terms are silent about a claim, do not guess: use evidence_type needs_judgment and say what the reviewer should confirm.
 - Trigger terms (a specific rate, payment amount, number of payments, period of repayment, or amount of any finance charge / fee) require the matching disclosures; if the ad states a trigger term and the disclosure is missing, report it once as missing_disclosure, quoting the trigger term.
 - Deterministic checks already flagged the items the user message lists under "Already flagged". Do not repeat them. You may add problems they missed.
