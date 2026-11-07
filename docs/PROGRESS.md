@@ -1,6 +1,6 @@
 # Progress log
 
-Active run: none (handoff written 2026-11-07T00:50Z)
+Active run: 2026-11-07T00:58Z (local session on Max's laptop; it refreshes this line with every push. Cloud runs: skip while it is less than 50 minutes old)
 
 Read `docs/HANDOFF.md` first. Newest entries at the bottom. Keep entries short and factual.
 
