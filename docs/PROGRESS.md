@@ -60,3 +60,10 @@ Read `docs/HANDOFF.md` first. Newest entries at the bottom. Keep entries short a
 - Arrivals: bounces, calendar traffic, account notices and receipts are never candidates; triage rows say "Could be an ad: has a call to action" instead of signal dumps. The two system-mail rows in ClearPath were reclassified.
 - ClearPath left empty (samples cleared, test ads retired) so the chips show.
 - Design review (six lenses + red team, this morning) and the roadmap it produced are summarized in the README roadmap section; the longer notes are in the session transcript.
+
+## 2026-11-07 10:50 CST — after hand-in: rules and beyond, user-defined product facts, Get started (tag `final`)
+
+- Check prompt: the rulebook plus anything the model is confident is a legal problem no rule covers, shown as **Worth a look (not a rule yet)** (Minor, verified quote, never blocks approval). Three-fixture live eval clean; verified on production.
+- Products: no fixed fields. Every fact is a row (add, edit, remove); the lender fields are "+ Add" suggestions. Verified on production: 18 removable rows on CC-1, remove and re-add work; nothing saved during the check.
+- Get started in the sidebar: four steps (connect, invite, first ad, first decision) ticked off from real data, Connect buttons inline on step 1. Verified on production (2 of 4 done for the reviewer account, which has no connections and is ClearPath's only member).
+- Tags: `submission` (last night), `submission-final` .. `-3` (this morning's steps), `final` = this state. `main` is always the hand-in.
