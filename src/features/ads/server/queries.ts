@@ -1382,7 +1382,7 @@ export async function getNextNeedsReviewIdWith(db: Db, profileId: string, exclud
 export function nudgeStaleRunsAfter(profileId: string): void {
   after(async () => {
     try {
-      const mod = (await import("@/features/analysis/server/engine")) as Record<string, unknown>;
+      const mod = (await import("@/features/analysis/server/engine/queue")) as Record<string, unknown>;
       const fn = mod.nudgeStaleRuns;
       if (typeof fn === "function") await (fn as (id: string) => Promise<void>)(profileId);
     } catch (err) {

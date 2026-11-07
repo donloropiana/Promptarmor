@@ -21,7 +21,7 @@ import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { deflateSync } from "node:zlib";
 
-import { startAnalysisForVersion } from "@/features/analysis/server/engine";
+import { startAnalysisForVersion } from "@/features/analysis/server/engine/queue";
 import { addVersion, createAd } from "@/features/ads/server/intake";
 import { getSampleAd } from "@/features/ads/samples";
 import { requireSupabaseAdminClient } from "@/lib/supabase/admin";

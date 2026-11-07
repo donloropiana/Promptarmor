@@ -1,6 +1,8 @@
 import { timingSafeEqual } from "node:crypto";
 
-import { getAiMode, runAnalysis, STALE_QUEUED_MS, STUCK_RUNNING_MS } from "@/features/analysis/server/engine";
+import { getAiMode } from "@/lib/ai/mode";
+import { runAnalysis } from "@/features/analysis/server/engine/run";
+import { STALE_QUEUED_MS, STUCK_RUNNING_MS } from "@/features/analysis/server/engine/queue";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 /**

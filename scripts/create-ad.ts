@@ -22,7 +22,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-import { runAnalysis } from "@/features/analysis/server/engine";
+import { runAnalysis } from "@/features/analysis/server/engine/run";
 import { createAd, createSampleAd, simulateRevision } from "@/features/ads/server/intake";
 import { ensureWorkspaceDefaults, seedStarterLibrary } from "@/features/workspaces/server/seed";
 import { requireSupabaseAdminClient } from "@/lib/supabase/admin";

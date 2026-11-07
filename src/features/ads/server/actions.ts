@@ -8,7 +8,8 @@ import { z } from "zod";
 
 import { SIGNED_OUT, invalid, type ActionResult as SharedActionResult } from "@/lib/action-result";
 import { APPROVED_STATUSES, ARCHIVABLE_STATUSES, isLive } from "@/features/ads/domain";
-import { startAnalysisForVersion, askAboutAd as askAboutAdEngine } from "@/features/analysis/server/engine";
+import { startAnalysisForVersion } from "@/features/analysis/server/engine/queue";
+import { askAboutAd as askAboutAdEngine } from "@/features/analysis/server/chat";
 import { locateQuote, spanHash } from "@/features/analysis/spans";
 import { getActiveProfileId, getCurrentUser, getMembershipRole } from "@/features/auth/server/dal";
 import { getNextNeedsReviewId } from "./queries";

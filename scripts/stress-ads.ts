@@ -41,7 +41,7 @@ import { deflateSync } from "node:zlib";
 
 import { createClient } from "@supabase/supabase-js";
 
-import { startAnalysisForVersion } from "@/features/analysis/server/engine";
+import { startAnalysisForVersion } from "@/features/analysis/server/engine/queue";
 import { createAd } from "@/features/ads/server/intake";
 import { requireSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/types";
