@@ -4,7 +4,7 @@ import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/s
 import type { ProfileSummary } from "@/features/auth/server/dal";
 
 import { AppSidebar, type ShellUser } from "./app-sidebar";
-import { NotificationsBell } from "./notifications-bell";
+import { NotificationsBell } from "@/features/workspaces/components/notifications-bell";
 import { SidebarReopen } from "./sidebar-reopen";
 import { Wordmark } from "./wordmark";
 

@@ -1,5 +1,6 @@
 import "server-only";
 
+import { displayName } from "@/lib/display-name";
 import { cache } from "react";
 
 import { requireMember } from "@/features/auth/server/dal";
@@ -70,13 +71,6 @@ function role(v: unknown): ProfileRole {
   return v === "owner" ? "owner" : "member";
 }
 
-// Private copy of the display-name rule in connections/server/queries.ts; keep the two in step.
-function nameOf(u: { full_name?: string | null; email?: string | null } | null | undefined): string | null {
-  if (!u) return null;
-  const n = u.full_name?.trim();
-  return n || u.email || null;
-}
-
 /** Members of the workspace with their role, owners first then by join date. */
 export const getMembers = cache(async (profileId: string): Promise<MemberRow[]> => {
   const { supabase } = await requireMember(profileId);
@@ -143,7 +137,7 @@ export const getPendingInvitations = cache(async (profileId: string): Promise<In
   if (inviterIds.length > 0) {
     const { data: users } = await supabase.from("users").select("id, full_name, email").in("id", inviterIds);
     for (const u of (users ?? []) as { id: string; full_name: string | null; email: string }[]) {
-      names.set(u.id, nameOf(u));
+      names.set(u.id, displayName(u));
     }
   }
   const now = Date.now();
@@ -228,7 +222,7 @@ export const getRecentEvents = cache(async (profileId: string, limit = 10): Prom
   if (userIds.size > 0) {
     const { data: users } = await supabase.from("users").select("id, full_name, email").in("id", [...userIds]);
     for (const u of (users ?? []) as { id: string; full_name: string | null; email: string }[]) {
-      const n = nameOf(u);
+      const n = displayName(u);
       if (n) names.set(u.id, n);
     }
   }

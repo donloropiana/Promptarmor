@@ -2,7 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { sanitizeFilename } from "@/features/connections/content";
+import { sanitizeFilename } from "@/lib/files";
 import type { Database } from "./types";
 
 /**

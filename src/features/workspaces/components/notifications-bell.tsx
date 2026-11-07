@@ -10,7 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { WorkspaceEvent } from "@/features/workspaces/server/queries";
 
 import { timeAgo } from "@/lib/format";
-import { fetchRecentEvents } from "./notifications-actions";
+import { fetchRecentEvents } from "@/features/workspaces/server/notifications";
 
 /**
  * In-app notifications: the last 10 workspace events in plain English.

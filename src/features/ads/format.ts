@@ -4,7 +4,7 @@ import { isLive, liveChannelLabel, type Lifecycle } from "./domain";
 
 /**
  * Presentation helpers (relative times, dates, money, durations, plain-English
- * labels) shared by the Ads list, the Ad page and src/features/ads/server/queries.ts.
+ * labels) shared by the Ads list, the Ad page and src/features/ads/server/queries/.
  * No "use client", no server-only imports: safe on both sides. Domain rules
  * (tabs, statuses, lifecycle, channels, ranking) live in ./domain.
  */

@@ -10,7 +10,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
  *
  * Safety net for analysis runs nobody finished: the request that created a
  * version normally runs the check in after(), and the Ads list nudges
- * stale runs on every load (nudgeStaleRuns in lib/ai/engine). This sweep
+ * stale runs on every load (nudgeStaleRuns in src/features/analysis/server/engine/queue.ts). This sweep
  * covers the rest, across every workspace:
  *   1. runs stuck in 'running' for over 10 minutes -> failed (+ manual review)
  *   2. queued runs older than 2 minutes -> run, oldest first, while time allows

@@ -2,7 +2,8 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { bytesToText, resolveMime } from "@/features/connections/content";
+import { bytesToText } from "@/features/connections/content";
+import { resolveMime } from "@/lib/files";
 import { SAMPLE_ADS } from "@/features/ads/samples";
 import { requireSupabaseAdminClient } from "@/lib/supabase/admin";
 import { downloadObject, uploadVersionBytes } from "@/lib/supabase/storage";
@@ -18,7 +19,7 @@ import { hasVisibleText, inferChannel, inferProduct, inferTitle } from "@/featur
  * Intake: turning pasted text, uploaded files, sample ads and connector
  * arrivals into assets and immutable versions. Inserting a version makes the
  * database queue an analysis run; callers then start it with
- * `after(() => startAnalysisForVersion(versionId))` (lib/ai/engine).
+ * `after(() => startAnalysisForVersion(versionId))` (src/features/analysis/server/engine/queue.ts).
  *
  * Every function confirms membership with the admin client before writing
  * (the admin client bypasses RLS). Nothing here runs the check.

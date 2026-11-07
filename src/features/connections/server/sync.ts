@@ -8,16 +8,8 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Database, Json } from "@/lib/supabase/types";
 
 import { classifyItem, type ClassifyResult } from "@/features/connections/classify";
-import {
-  clip,
-  isImageMime,
-  MAX_STORE_BYTES,
-  MIN_TEXT_FOR_HASH_DEDUPE,
-  normalizedTextHash,
-  sanitizeFilename,
-  sha256Hex,
-  STORABLE_MIME,
-} from "@/features/connections/content";
+import { clip, MIN_TEXT_FOR_HASH_DEDUPE, normalizedTextHash, sha256Hex } from "@/features/connections/content";
+import { isImageMime, MAX_STORE_BYTES, sanitizeFilename, STORABLE_MIME } from "@/lib/files";
 import { getAdapter } from "@/features/connections/providers/registry";
 import {
   isAuthError,

@@ -42,7 +42,7 @@ import { setActiveProfile } from "@/features/workspaces/server/actions";
 import type { ProfileSummary } from "@/features/auth/server/dal";
 
 import { initials } from "@/lib/format";
-import { NotificationsBell } from "./notifications-bell";
+import { NotificationsBell } from "@/features/workspaces/components/notifications-bell";
 
 export type ShellUser = { id: string; name: string | null; email: string | null };
 

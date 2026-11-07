@@ -1,17 +1,7 @@
 import "server-only";
 
-import {
-  base64ToBytes,
-  bytesToText,
-  charsetOf,
-  clip,
-  htmlToText,
-  isInlineImage,
-  isTextMime,
-  MAX_STORE_BYTES,
-  parseAddress,
-  resolveMime,
-} from "@/features/connections/content";
+import { base64ToBytes, bytesToText, charsetOf, clip, htmlToText, isInlineImage, parseAddress } from "@/features/connections/content";
+import { isTextMime, MAX_STORE_BYTES, resolveMime } from "@/lib/files";
 import { providerGetJson } from "./proxy";
 import {
   ProviderHttpError,

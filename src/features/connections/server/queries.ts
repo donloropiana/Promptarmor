@@ -1,5 +1,6 @@
 import "server-only";
 
+import { displayName } from "@/lib/display-name";
 import { cache } from "react";
 
 import { requireMember, type Membership } from "@/features/auth/server/dal";
@@ -48,13 +49,6 @@ export type SyncRunRow = {
   error: string | null;
 };
 
-// Private copy of the display-name rule in workspaces/server/queries.ts; keep the two in step.
-function nameOf(u: { full_name?: string | null; email?: string | null } | null | undefined): string | null {
-  if (!u) return null;
-  const n = u.full_name?.trim();
-  return n || u.email || null;
-}
-
 function connStatus(v: unknown): ConnectionSummary["status"] {
   return v === "connected" || v === "syncing" || v === "needs_reconnect" || v === "error" || v === "disconnected"
     ? v
@@ -100,7 +94,7 @@ export const getConnectionsByMember = cache(async (profileId: string): Promise<M
       const m = r.connected_by ? memberById.get(r.connected_by) : undefined;
       g = {
         userId: r.connected_by,
-        name: m ? (nameOf({ full_name: m.fullName, email: m.email }) ?? "Member") : "Former member",
+        name: m ? (displayName({ full_name: m.fullName, email: m.email }) ?? "Member") : "Former member",
         email: m?.email ?? null,
         isMe: r.connected_by === user.id,
         connections: [],

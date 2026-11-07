@@ -1,6 +1,7 @@
 import "server-only";
 
-import { bytesToText, clip, htmlToText, isTextMime, MAX_STORE_BYTES, resolveMime } from "@/features/connections/content";
+import { bytesToText, clip, htmlToText } from "@/features/connections/content";
+import { isTextMime, MAX_STORE_BYTES, resolveMime } from "@/lib/files";
 import { providerGetBytes, providerGetJson } from "./proxy";
 import {
   ProviderHttpError,
