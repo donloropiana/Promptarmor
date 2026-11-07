@@ -2,6 +2,7 @@
 
 import {
   BookOpenCheckIcon,
+  CompassIcon,
   CheckIcon,
   ChevronsUpDownIcon,
   FilesIcon,
@@ -48,6 +49,7 @@ export type ShellUser = { id: string; name: string | null; email: string | null 
 const NAV = [
   { href: "/ads", label: "Ads", icon: FilesIcon },
   { href: "/rules", label: "Rules", icon: BookOpenCheckIcon },
+  { href: "/get-started", label: "Get started", icon: CompassIcon },
 ] as const;
 
 const WORKSPACE_MENU = [
