@@ -131,6 +131,104 @@
     @apply font-sans;
   }
 }
+/* Motion. Tokens, then the few patterns the app uses. Everything names exact
+   properties (never `all`), stays under 300 ms, and uses a strong ease-out so
+   movement starts at once. Keyboard actions never animate; only the result does. */
+:root {
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --dur-fast: 120ms;
+  --dur: 180ms;
+}
+
+/* Press feedback on every button: the interface acknowledging the click. */
+[data-slot="button"]:not(:disabled) {
+  transition:
+    transform var(--dur-fast) var(--ease-out),
+    background-color 120ms ease,
+    color 120ms ease,
+    border-color 120ms ease,
+    opacity 120ms ease;
+}
+[data-slot="button"]:not(:disabled):active {
+  transform: scale(0.97);
+}
+
+/* A section arriving: fade and rise 8px. Used for the ad page on open, so a
+   decision that jumps to the next ad reads as a move, not a swap. */
+.enter {
+  opacity: 1;
+  transform: translateY(0);
+  transition:
+    opacity var(--dur) var(--ease-out),
+    transform var(--dur) var(--ease-out);
+  @starting-style {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+/* A list arriving together: each item 40 ms after the previous (set --i). */
+.enter-stagger > * {
+  animation: enter-up var(--dur) var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * 40ms);
+}
+@keyframes enter-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+/* Indeterminate progress line while a check runs: constant motion, linear. */
+.progress-line {
+  position: relative;
+  height: 2px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--foreground) 10%, transparent);
+}
+.progress-line::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  border-radius: 999px;
+  background: var(--foreground);
+  animation: progress-slide 1.1s linear infinite;
+}
+@keyframes progress-slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+
+/* An issue card on its way to the resolved list. */
+.leaving {
+  opacity: 0;
+  transform: translateX(8px) scale(0.98);
+  transition:
+    opacity 160ms var(--ease-out),
+    transform 160ms var(--ease-out);
+  pointer-events: none;
+}
+
+/* A row that arrived in the last minute: a tint that fades over a second. */
+.row-new {
+  animation: row-tint 1s ease both;
+}
+@keyframes row-tint {
+  from {
+    background-color: color-mix(in oklab, var(--foreground) 8%, transparent);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+
 /* Respect the OS "reduce motion" setting: enter/exit animations and
    transitions finish at once. Spinners stop too (components/ui/spinner.tsx
    adds motion-reduce:animate-none); a spinner sits beside a word such as

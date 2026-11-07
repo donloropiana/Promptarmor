@@ -74,7 +74,7 @@ export function AdRow({ row, now }: { row: AdListRow; now: number }) {
   const showRiskMark = !row.checking && row.openCritical + row.openMajor + row.openMinor > 0;
   const openTotal = row.openCritical + row.openMajor + row.openMinor;
   return (
-    <li>
+    <li className={row.submittedAt && now - new Date(row.submittedAt).getTime() < 60_000 ? "row-new" : undefined}>
       <Link
         data-ad-row
         href={`/ads/${row.id}`}

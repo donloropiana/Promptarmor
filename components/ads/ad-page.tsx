@@ -275,7 +275,7 @@ export function AdPage({ detail, userId }: { detail: AdDetail; userId: string })
   );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="enter flex min-h-0 flex-1 flex-col">
       <AutoRefresh active={detail.checking} />
       <ReviewSession profileId={detail.profileId} versionId={detail.latest.id} />
 
@@ -360,12 +360,15 @@ function CheckStatus({ detail, openCount }: { detail: AdDetail; openCount: numbe
   const v = detail.latest.versionNo;
   if (detail.checking) {
     return (
-      <div className="flex items-start gap-3 rounded-xl border bg-card p-4" role="status" aria-live="polite">
-        <Spinner className="mt-0.5 size-4 motion-reduce:animate-none" />
-        <div className="min-w-0">
-          <div className="text-sm font-medium">Checking V{v}…</div>
-          <p className="text-sm text-muted-foreground">{stageLabel(run?.stage, run?.status)}. Usually under a minute. Issues appear here as soon as it finishes.</p>
+      <div className="rounded-xl border bg-card p-4" role="status" aria-live="polite">
+        <div className="flex items-start gap-3">
+          <Spinner className="mt-0.5 size-4 motion-reduce:animate-none" />
+          <div className="min-w-0">
+            <div className="text-sm font-medium">Checking V{v}…</div>
+            <p className="text-sm text-muted-foreground">{stageLabel(run?.stage, run?.status)}. Usually under a minute. Issues appear here as soon as it finishes.</p>
+          </div>
         </div>
+        <div className="progress-line mt-3 motion-reduce:hidden" aria-hidden />
       </div>
     );
   }

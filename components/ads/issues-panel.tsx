@@ -5,6 +5,7 @@ import { cn } from "cn";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 
+import { AnimatedUl } from "@/components/ui/animated-list";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -94,9 +95,9 @@ export function IssuesPanel({
           <h3 className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
             {severityLabel(g.severity)} <span className="tabular-nums">({g.items.length})</span>
           </h3>
-          <ul className="space-y-2">
-            {g.items.map((f) => (
-              <li key={f.id}>
+          <AnimatedUl className="enter-stagger space-y-2">
+            {g.items.map((f, i) => (
+              <li key={f.id} style={{ "--i": Math.min(i, 6) } as React.CSSProperties}>
                 <IssueCard
                   finding={f}
                   assetId={assetId}
@@ -110,7 +111,7 @@ export function IssuesPanel({
                 />
               </li>
             ))}
-          </ul>
+          </AnimatedUl>
         </section>
       ))}
 
@@ -126,13 +127,13 @@ export function IssuesPanel({
             Dismissed <span className="tabular-nums">({dismissed.length})</span>
           </button>
           {showDismissed && (
-            <ul className="space-y-2">
+            <AnimatedUl className="space-y-2">
               {dismissed.map((f) => (
                 <li key={f.id}>
                   <DismissedCard finding={f} readOnly={readOnly} onSelect={() => onSelect(f.id)} selected={selectedId === f.id} />
                 </li>
               ))}
-            </ul>
+            </AnimatedUl>
           )}
         </section>
       )}

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { AnimatedUl } from "@/components/ui/animated-list";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import type { AdListRow, SkippedRow, TriageRow } from "@/lib/data/ads";
@@ -142,11 +143,11 @@ export function AdsList({
       ) : (
         <div ref={listRef} className="space-y-3">
           {real.length > 0 && (
-            <ul className="divide-y rounded-xl border bg-card" aria-label={`${TABS.find((t) => t.key === tab)?.label} ads`}>
+            <AnimatedUl className="divide-y rounded-xl border bg-card" aria-label={`${TABS.find((t) => t.key === tab)?.label} ads`}>
               {real.map((row) => (
                 <AdRow key={row.id} row={row} now={now} />
               ))}
-            </ul>
+            </AnimatedUl>
           )}
           {samples.length > 0 && (
             <section aria-labelledby="samples-heading">
