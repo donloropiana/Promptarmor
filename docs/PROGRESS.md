@@ -1,6 +1,6 @@
 # Progress log
 
-Active run: 2026-11-07T05:52Z (local session on Max's laptop; it refreshes this line with every push. Cloud runs: skip while it is less than 50 minutes old)
+Active run: 2026-11-07T06:09Z (local session on Max's laptop; it refreshes this line with every push. Cloud runs: skip while it is less than 50 minutes old)
 
 Read `docs/HANDOFF.md` first. Newest entries at the bottom. Keep entries short and factual.
 
@@ -44,3 +44,10 @@ Read `docs/HANDOFF.md` first. Newest entries at the bottom. Keep entries short a
 - Verified locally (AI_MODE off, `ai_usage` unchanged at 17 rows): tsc, lint, build; verify-ads 96/96 (68 + 28 new checks: floating button placement at 1280/390, dialog, rule picker, toast, panel chip/quote/rule, highlight, open count +1, history line, Approve sheet lists it as an exception, error path, Not a problem on it); smoke 44/44. ClearPath cleaned with `scripts/cleanup-workspace.ts` (4 retired; 18 older approved/decided `[test]` ads from earlier rounds are kept by design).
 - Dev-server note: after editing files while a Playwright client was connected, `next dev` (Turbopack) went into a "[Fast Refresh] rebuilding" → full reload loop on every page until restarted; restart fixed it.
 - README: Known-limitations bullet removed, "Add issue" added under Decisions; docs/schema.md notes the reviewer insert path.
+
+### 2026-11-07T06:09Z submission candidate (tag `submission`)
+- Production https://promptarmor-two.vercel.app serves 533b38a: smoke 45/45; Add issue verified live (floating button, dialog, "Added by you", rule links with legal sources on every issue card); session cookie httpOnly; security headers; /api/health gated.
+- ClearPath workspace: 0 visible ads (empty state with the three sample chips), 0 pending invitations, 2 owners (reviewer account + Max). Hidden: 18 approved "[test]" ads (sample_cleared, not listed) and verification versions in the PL-1 / AFFILIATE-DISCLOSE histories. A fresh workspace needs the old ones purged (`private.purge_profile`), which this session deliberately left for Max.
+- AI Gateway key rotated to `promptarmor-demo` ($2/day); still blocked on a credit card. ai_usage shows only $0 released reservations.
+- Cloud routine stays disabled.
+
