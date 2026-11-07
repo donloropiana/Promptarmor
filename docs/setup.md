@@ -49,7 +49,7 @@ session. `http://localhost:3000/**` is a smaller version of the same risk
 | --- | --- |
 | Enable email provider | ON |
 | Confirm email | **ON** (required: invitations are bound to verified emails) |
-| Secure email change | **ON** |
+| Secure email change | **OFF** (Settings → Your account: only the new address confirms; the old one is not asked) |
 | Secure password change | ON |
 | Minimum password length | 8 |
 | Email OTP length | **6** |
@@ -159,7 +159,10 @@ Subject: `Reset your password`
 <p>If you didn't ask to reset your password, ignore this email.</p>
 ```
 
-### Change email address (optional, for completeness)
+### Change email address
+
+Sent to the new address when someone changes their email under Settings →
+Your account. The change takes effect when that link is opened.
 
 Subject: `Confirm your new email`
 
