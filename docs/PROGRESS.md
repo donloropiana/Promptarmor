@@ -67,3 +67,13 @@ Read `docs/HANDOFF.md` first. Newest entries at the bottom. Keep entries short a
 - Products: no fixed fields. Every fact is a row (add, edit, remove); the lender fields are "+ Add" suggestions. Verified on production: 18 removable rows on CC-1, remove and re-add work; nothing saved during the check.
 - Get started in the sidebar: four steps (connect, invite, first ad, first decision) ticked off from real data, Connect buttons inline on step 1. Verified on production (2 of 4 done for the reviewer account, which has no connections and is ClearPath's only member).
 - Tags: `submission` (last night), `submission-final` .. `-3` (this morning's steps), `final` = this state. `main` is always the hand-in.
+
+## 2026-11-07 afternoon — after hand-in, continued (main @ 715fd99)
+
+- Get started counts only live, non-sample ads and decisions on them (was counting cleared samples and retired test ads).
+- Products: no fixed fields at all; every fact a row (add / edit / remove), lender fields as "+ Add" suggestions; no unit labels, values carry their unit ("8.99%", "$95", "12 months") and save as numbers.
+- Motion (globals.css tokens, @formkit/auto-animate for lists): press feedback, ad-page arrival, staggered issue cards, progress line while checking, list exit/reflow, new-row tint, dialog 200 ms / sheet 300 ms with strong ease-out; reduced motion respected. verify-ads 96/96 locally, smoke 44/44 on production.
+- Three Claude sessions worked in the same checkout this afternoon; each committed by explicit path. Other sessions added: data fixes (dc9133e), account settings page (999cdbc), setup doc (11dfbfd).
+- The reviewer test account's password was changed via Settings → Your account at 15:51 UTC (not in the repo; ask Max).
+- Not built, by choice or pending a decision: in-context analytics, shared intake address, sender-domain filter, classifier vocabulary as workspace data, "Propose as rule" + eCFR excerpt, AI prefill of facts.
+
