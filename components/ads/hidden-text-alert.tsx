@@ -57,9 +57,7 @@ export function HiddenTextAlert({ alerts, issueCount }: { alerts: AdAlert[]; iss
           </ul>
           {open.length > 0 && (
             <div className="flex flex-wrap items-center gap-2 pt-1">
-              {open.map((a) => (
-                <AcknowledgeButton key={a.id} alertId={a.id} count={open.length} />
-              ))}
+              <AcknowledgeButton alertIds={open.map((a) => a.id)} />
             </div>
           )}
           {open.length === 0 && acknowledged.length > 0 && (
@@ -73,7 +71,8 @@ export function HiddenTextAlert({ alerts, issueCount }: { alerts: AdAlert[]; iss
   );
 }
 
-function AcknowledgeButton({ alertId, count }: { alertId: string; count: number }) {
+/** One button for the whole card: every open excerpt is acknowledged together, and decisions unblock. */
+function AcknowledgeButton({ alertIds }: { alertIds: string[] }) {
   const [pending, start] = useTransition();
   const [done, setDone] = useState(false);
   return (
@@ -84,17 +83,18 @@ function AcknowledgeButton({ alertId, count }: { alertId: string; count: number 
       disabled={pending || done}
       onClick={() =>
         start(async () => {
-          const res = await acknowledgeAlert(alertId);
-          if (!res.ok) toast.error(res.error);
+          const results = await Promise.all(alertIds.map((id) => acknowledgeAlert(id)));
+          const failed = results.find((r) => !r.ok);
+          if (failed && !failed.ok) toast.error(failed.error);
           else {
             setDone(true);
-            toast.success("Acknowledged");
+            toast.success("Acknowledged. Decisions are unblocked.");
           }
         })
       }
     >
       {pending ? <Spinner className="motion-reduce:animate-none" /> : <ShieldCheck data-icon="inline-start" />}
-      {count > 1 ? "Acknowledge this one" : "I have read this. Acknowledge"}
+      I have read this{alertIds.length > 1 ? ` (${alertIds.length} excerpts)` : ""}. Unblock decisions
     </Button>
   );
 }

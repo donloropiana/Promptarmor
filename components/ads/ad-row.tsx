@@ -13,12 +13,19 @@ import {
   MonitorPlay,
   Search,
   Sparkles,
+  Trash2,
   Type,
   Upload,
   User,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useTransition } from "react";
+import { toast } from "sonner";
 
+import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
+import { removeAd, restoreAd } from "@/lib/actions/remove-ad";
 import type { AdListRow, ThumbIcon } from "@/lib/data/ads";
 
 import { relativeTime } from "./format";
@@ -65,8 +72,54 @@ function FromIcon({ kind, provider }: { kind: AdListRow["from"]["kind"]; provide
   return <User aria-hidden className={cls} />;
 }
 
+/**
+ * The trash can on a row. No confirmation: the toast carries Undo. Approved
+ * ads are frozen, so the can is not shown on them (withdraw the approval first).
+ */
+function RemoveButton({ row }: { row: AdListRow }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  return (
+    <Button
+      type="button"
+      size="icon-sm"
+      variant="ghost"
+      disabled={pending}
+      aria-label={`Remove ${row.title} from the list`}
+      title="Remove from the list (not an ad, duplicate, mistake)"
+      className="text-muted-foreground hover:text-destructive"
+      onClick={() =>
+        start(async () => {
+          const res = await removeAd({ assetId: row.id });
+          if (!res.ok) {
+            toast.error(res.error);
+            return;
+          }
+          const previous = res.data.previousStatus;
+          toast("Removed", {
+            description: "Nothing is deleted; the record stays.",
+            action: {
+              label: "Undo",
+              onClick: () => {
+                void restoreAd({ assetId: row.id, status: previous }).then((r) => {
+                  if (!r.ok) toast.error(r.error);
+                  else router.refresh();
+                });
+              },
+            },
+          });
+          router.refresh();
+        })
+      }
+    >
+      {pending ? <Spinner className="motion-reduce:animate-none" /> : <Trash2 />}
+    </Button>
+  );
+}
+
 export function AdRow({ row, now }: { row: AdListRow; now: number }) {
   const submittedAbsolute = useLocalDateTime(row.submittedAt);
+  const removable = row.status !== "approved" && row.status !== "approved_with_exceptions";
   // Samples sit under their own heading in the list, so the tag would repeat it.
   const tags = row.isSample ? row.tags.filter((t) => t !== "Sample") : row.tags;
   // The risk mark only earns its place when there is something open; the
@@ -74,11 +127,11 @@ export function AdRow({ row, now }: { row: AdListRow; now: number }) {
   const showRiskMark = !row.checking && row.openCritical + row.openMajor + row.openMinor > 0;
   const openTotal = row.openCritical + row.openMajor + row.openMinor;
   return (
-    <li className={row.submittedAt && now - new Date(row.submittedAt).getTime() < 60_000 ? "row-new" : undefined}>
+    <li className={`flex items-stretch ${row.submittedAt && now - new Date(row.submittedAt).getTime() < 60_000 ? "row-new" : ""}`}>
       <Link
         data-ad-row
         href={`/ads/${row.id}`}
-        className="group flex gap-3 px-3 py-3 outline-none transition-colors hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-inset sm:px-4"
+        className="group flex min-w-0 flex-1 gap-3 px-3 py-3 outline-none transition-colors hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-inset sm:px-4"
         aria-label={`${row.title}. ${row.checking ? "Checking" : row.status.replace(/_/g, " ")}.`}
       >
         <Thumb thumbnail={row.thumbnail} title={row.title} />
@@ -149,6 +202,11 @@ export function AdRow({ row, now }: { row: AdListRow; now: number }) {
           </div>
         </div>
       </Link>
+      {removable && (
+        <div className="flex shrink-0 items-center pr-2 sm:pr-3">
+          <RemoveButton row={row} />
+        </div>
+      )}
     </li>
   );
 }
