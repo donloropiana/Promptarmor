@@ -10,17 +10,26 @@ export type RecheckLabel = "Fixed" | "Still there" | "New";
 
 export type ChangeSummary = {
   fixed: AdFinding[];
+  /** Prior issues the new check did not raise again although their words are still in the ad. */
+  notReflagged: AdFinding[];
   stillThere: AdFinding[];
   fresh: AdFinding[];
 };
 
-/** Fixed = a prior issue with no successor; Still there = successor exists; New = no prior. */
+/**
+ * Fixed = a prior issue with no successor whose quoted words are gone from the
+ * new version; Not re-flagged = no successor but the words are still there (a
+ * failed check, model variance, or a reviewer-added issue); Still there =
+ * successor exists; New = no prior.
+ */
 export function summariseChanges(current: AdFinding[], previous: AdFinding[]): ChangeSummary {
   const succeeded = new Set(current.map((f) => f.priorFindingId).filter((v): v is string => Boolean(v)));
-  const fixed = previous.filter((p) => !succeeded.has(p.id) && (p.open || p.disposition?.disposition === "accepted_exception"));
+  const unmatched = previous.filter((p) => !succeeded.has(p.id) && (p.open || p.disposition?.disposition === "accepted_exception"));
+  const fixed = unmatched.filter((p) => !p.wordsStillThere);
+  const notReflagged = unmatched.filter((p) => p.wordsStillThere);
   const stillThere = current.filter((f) => f.priorFindingId || f.recheckStatus === "still_present" || f.recheckStatus === "re_anchored");
   const fresh = current.filter((f) => !f.priorFindingId && f.recheckStatus !== "still_present" && f.recheckStatus !== "re_anchored");
-  return { fixed, stillThere, fresh };
+  return { fixed, notReflagged, stillThere, fresh };
 }
 
 export function recheckLabel(f: AdFinding): RecheckLabel {
@@ -35,6 +44,12 @@ export function ChangeSummaryLine({ summary, className }: { summary: ChangeSumma
       <span className="font-medium">{summary.stillThere.length} still there</span>
       <span className="text-muted-foreground"> · </span>
       <span className="font-medium">{summary.fresh.length} new</span>
+      {summary.notReflagged.length > 0 && (
+        <>
+          <span className="text-muted-foreground"> · </span>
+          <span className="font-medium">{summary.notReflagged.length} not re-flagged</span>
+        </>
+      )}
     </p>
   );
 }

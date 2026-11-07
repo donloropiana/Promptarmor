@@ -4,6 +4,8 @@ import type { PostgrestError } from "@supabase/supabase-js";
 import { refresh } from "next/cache";
 import { z } from "zod";
 
+import { TERM_FIELDS } from "@/components/rules/term-fields";
+import { SIGNED_OUT, invalid, type ActionResult as SharedActionResult } from "@/lib/actions/result";
 import { getMembershipRole } from "@/lib/auth/dal";
 import { getApprovedAdsUsingOfferVersion, type AffectedAd } from "@/lib/data/rules";
 import { requireSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -17,9 +19,7 @@ import type { Json } from "@/lib/supabase/types";
  * ads back to Needs review (status re_review_due, tagged "Rates changed").
  */
 
-export type ActionResult<T = null> =
-  | { ok: true; data: T }
-  | { ok: false; error: string; code?: string };
+export type ActionResult<T = null> = SharedActionResult<T>;
 
 type Input = FormData | Record<string, unknown>;
 
@@ -67,11 +67,6 @@ function toObject(input: Input): Record<string, unknown> {
   return input ?? {};
 }
 
-function invalid(error: z.ZodError): { ok: false; error: string; code: string } {
-  return { ok: false, error: error.issues[0]?.message ?? "Check the form and try again.", code: "invalid_input" };
-}
-
-const SIGNED_OUT = { ok: false as const, error: "Your session has expired. Sign in again.", code: "unauthenticated" };
 const NOT_FOUND = { ok: false as const, error: "Product not found.", code: "PT404" };
 
 /** The database says "profile"; people see "workspace". */
@@ -122,27 +117,15 @@ async function currentVersion(ctx: AppSupabaseContext, offerId: string): Promise
   return (data as { id: string; version_no: number; terms: Json } | null) ?? null;
 }
 
-/** Keys that stay text even when they look like a number ("000000" NMLS ids, dates, labels). */
-const TEXT_KEYS = new Set([
-  "summary",
-  "notes",
-  "representative_example",
-  "nmls_id",
-  "rate_sheet_date",
-  "index",
-  "rate_type",
-  "late_fee",
-  "balance_transfer_fee",
-  "min_credit_tier",
-  "credit_check",
-  "funding_time",
-  "loan_type",
-  "intro_applies_to",
-  "rewards",
-  "equal_housing_legend",
-]);
+/**
+ * Only built-in fields with a numeric or yes/no kind are converted. Every
+ * other value, including any fact a workspace names itself, is kept exactly as
+ * typed: "02139" stays "02139". The checks read numbers out of text anyway.
+ */
+const NUMERIC_KEYS = new Set(TERM_FIELDS.filter((f) => f.kind === "percent" || f.kind === "money" || f.kind === "months" || f.kind === "number").map((f) => f.key));
+const BOOLEAN_KEYS = new Set(TERM_FIELDS.filter((f) => f.kind === "boolean").map((f) => f.key));
 
-/** Cleans a terms object: trims strings, drops empty values, turns "8.99" into 8.99 and "true" into true. */
+/** Cleans a terms object: trims strings, drops empty values, turns "8.99" into 8.99 and "true" into true for built-in fields. */
 function cleanTerms(raw: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(raw)) {
@@ -152,9 +135,8 @@ function cleanTerms(raw: Record<string, unknown>): Record<string, unknown> {
     if (typeof v === "string") {
       const s = v.trim();
       if (!s) continue;
-      const keepText = TEXT_KEYS.has(key) || /(_id|_date|_type|_text|_legend|_label)$/.test(key);
-      if (!keepText && /^-?\d+(\.\d+)?$/.test(s)) out[key] = Number(s);
-      else if (!keepText && (s === "true" || s === "false")) out[key] = s === "true";
+      if (NUMERIC_KEYS.has(key) && /^-?\d+(\.\d+)?$/.test(s)) out[key] = Number(s);
+      else if (BOOLEAN_KEYS.has(key) && (s === "true" || s === "false")) out[key] = s === "true";
       else out[key] = s.slice(0, 2000);
       continue;
     }

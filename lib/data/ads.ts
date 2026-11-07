@@ -14,6 +14,7 @@ import {
   tabForStatus,
   type Tab,
 } from "@/components/ads/format";
+import { locateQuote } from "@/lib/ai/spans";
 import { createClient } from "@/lib/supabase/server";
 import type { Database, Json } from "@/lib/supabase/types";
 import type { FindingAnchor, Product, Severity, VersionContent } from "@/lib/types/ads";
@@ -765,6 +766,11 @@ export type AdFinding = {
    * approval over them is recorded as a manual approval with a rationale.
    */
   decisionGrade: boolean;
+  /**
+   * Previous-version issues only: whether the quoted words still appear in the
+   * latest version. "Fixed" requires false; null on latest-version issues.
+   */
+  wordsStillThere: boolean | null;
   createdAt: string;
 };
 
@@ -929,7 +935,8 @@ export async function getAdDetailWith(db: Db, assetId: string, profileId: string
       .order("created_at", { ascending: true }),
     db.from("decisions").select("*").eq("asset_id", assetId).order("created_at", { ascending: false }),
     db.from("change_requests").select("*").eq("asset_id", assetId).order("created_at", { ascending: false }),
-    db.from("events").select("id, kind, actor_id, data, created_at").eq("asset_id", assetId).order("created_at", { ascending: true }).limit(500),
+    // Newest 500 (reversed below to oldest first), so a long history drops its oldest events, not its newest.
+    db.from("events").select("id, kind, actor_id, data, created_at").eq("asset_id", assetId).order("created_at", { ascending: false }).limit(500),
     db.from("profile_members").select("user_id").eq("profile_id", profileId),
     db.from("asset_sources").select("source_item_id").eq("asset_id", assetId),
     db
@@ -1112,13 +1119,19 @@ export async function getAdDetailWith(db: Db, assetId: string, profileId: string
       disposition,
       open: !disposition || disposition.disposition === "fix_required",
       decisionGrade: isDecisionGrade(f),
+      wordsStillThere: null,
       createdAt: f.created_at,
     };
   };
 
   const sortFindings = (a: AdFinding, b: AdFinding) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity] || a.createdAt.localeCompare(b.createdAt);
   const findings = usableFindings.filter((f) => f.asset_version_id === latest.id).map(toFinding).sort(sortFindings);
-  const previousFindings = previous ? usableFindings.filter((f) => f.asset_version_id === previous.id).map(toFinding).sort(sortFindings) : [];
+  const previousFindings = previous
+    ? usableFindings
+        .filter((f) => f.asset_version_id === previous.id)
+        .map((f) => ({ ...toFinding(f), wordsStillThere: f.quote ? locateQuote(latest.extractedText, f.quote) !== null : false }))
+        .sort(sortFindings)
+    : [];
 
   const runs: AdRun[] = runRows.map((r) => ({
     id: r.id,
@@ -1173,7 +1186,7 @@ export async function getAdDetailWith(db: Db, assetId: string, profileId: string
     resolvedAt: c.resolved_at,
   }));
 
-  const events: AdEvent[] = (eventsRes.data ?? []).map((e) => ({
+  const events: AdEvent[] = [...(eventsRes.data ?? [])].reverse().map((e) => ({
     id: e.id,
     kind: e.kind,
     actorLabel: label(e.actor_id),

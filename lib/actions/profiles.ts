@@ -7,6 +7,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
+import { SIGNED_OUT, invalid, type ActionResult as SharedActionResult } from "@/lib/actions/result";
 import { ACTIVE_PROFILE_COOKIE, getMembershipRole } from "@/lib/auth/dal";
 import { getRequestOrigin } from "@/lib/auth/origin";
 import { deleteUnconfirmedPasswordUser } from "@/lib/auth/unconfirmed";
@@ -28,9 +29,7 @@ import type { Json } from "@/lib/supabase/types";
  * useActionState, wrap: useActionState((_s, fd: FormData) => inviteMember(fd), null).
  */
 
-export type ActionResult<T = null> =
-  | { ok: true; data: T }
-  | { ok: false; error: string; code?: string; hint?: string };
+export type ActionResult<T = null> = SharedActionResult<T>;
 
 type Input = FormData | Record<string, unknown>;
 
@@ -85,11 +84,6 @@ function toObject(input: Input): Record<string, unknown> {
   return input ?? {};
 }
 
-function invalid(error: z.ZodError): { ok: false; error: string; code: string } {
-  return { ok: false, error: error.issues[0]?.message ?? "Invalid input.", code: "invalid_input" };
-}
-
-const SIGNED_OUT = { ok: false as const, error: "Your session has expired. Sign in again.", code: "unauthenticated" };
 
 /**
  * The database names the tenant a "profile"; the UI calls it a workspace.

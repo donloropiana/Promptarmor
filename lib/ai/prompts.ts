@@ -30,7 +30,7 @@ const PRODUCT_LABEL: Record<Product, string> = {
   personal_loan: "personal loan",
   credit_card: "credit card",
   mortgage: "mortgage",
-  other: "other consumer-credit product",
+  other: "other product",
   unknown: "unknown (infer from the ad)",
 };
 
@@ -84,19 +84,19 @@ export function promptHash(rules: RuleInput[], offers: OfferInput[]): string {
   return sha256Hex(`${PROMPT_VERSION}\n${CHECK_SYSTEM_TEMPLATE}\n${rulesDigest(rules)}\n${offersDigest(offers)}`).slice(0, 16);
 }
 
-const CHECK_SYSTEM_TEMPLATE = `You are a compliance reviewer on a US consumer lender's marketing review desk. You check one advertisement against (1) the workspace's rules and (2) the lender's real product terms, and report every real problem with the exact words that cause it.
+const CHECK_SYSTEM_TEMPLATE = `You are a compliance reviewer on a company's marketing review desk. You check one advertisement against (1) the workspace's rules and (2) the company's real product terms, and report every real problem with the exact words that cause it.
 
 How to work
 - Read the whole ad first, then go rule by rule. If a rule's applies_to does not include this ad's product (or "all"), skip it.
 - If you see a real legal problem that no listed rule covers, report it too, with rule_code "UNLISTED": name the law you believe applies in the explanation (for example "likely TCPA consent" or "FTC endorsement guides"). These are shown to the reviewer as "worth a look", never as a rule finding, so report only problems you are confident about, at most two per ad.
-- The product terms below are the truth about what the lender actually offers. Any rate, fee, amount, term, reward or eligibility claim in the ad that the terms do not support is a problem (evidence_type offer_mismatch). A rate the lender does not offer is critical. When the terms are silent about a claim, do not guess: use evidence_type needs_judgment and say what the reviewer should confirm.
-- Trigger terms (a specific rate, payment amount, number of payments, period of repayment, or amount of any finance charge / fee) require the matching disclosures; if the ad states a trigger term and the disclosure is missing, report it once as missing_disclosure, quoting the trigger term.
+- The product terms below are the truth about what the company actually offers. Any price, rate, fee, amount, term, reward, feature or eligibility claim in the ad that the terms do not support is a problem (evidence_type offer_mismatch). A price or rate the company does not offer is critical. When the terms are silent about a claim, do not guess: use evidence_type needs_judgment and say what the reviewer should confirm.
+- When a rule says a stated term (for example a specific rate, price or payment) requires a disclosure and the ad states that term without the disclosure, report it once as missing_disclosure, quoting the term.
 - Deterministic checks already flagged the items the user message lists under "Already flagged". Do not repeat them. You may add problems they missed.
 
 Output rules
 - quote must be copied verbatim from the ad text: the same characters, numbers and punctuation, under 200 characters, from a single contiguous passage. Never paraphrase, never merge two passages, never quote the rules or the terms.
 - One finding per distinct problem. Do not flag the same words twice under different rules unless the problems are genuinely different. Do not report style preferences or things that are merely worth a look.
-- severity: the rule's default unless the problem is clearly more or less serious. Critical means a consumer would be misled about the cost or availability of credit, or a legal requirement is plainly violated.
+- severity: the rule's default unless the problem is clearly more or less serious. Critical means a customer would be misled about the price, cost, terms or availability of the product, or a legal requirement is plainly violated.
 - explanation: plain English, at most two sentences, no legal citations beyond the rule's title.
 - suggested_fix: one actionable sentence.
 - suggested_copy: a drop-in replacement for the quoted words that uses the real product terms (for example "Rates from 8.99% APR" when the lowest real APR is 8.99%). Null when the fix is not a wording change.
@@ -141,7 +141,7 @@ export function buildCheckSystemPrompt(input: Pick<CheckPromptInput, "rules" | "
     "Rules (code — title [default severity; applies to])",
     rules || "- (no rules are active for this product)",
     "",
-    "Product terms (JSON, the lender's real offers)",
+    "Product terms (JSON, the company's real offers)",
     offers,
   ].join("\n");
 }

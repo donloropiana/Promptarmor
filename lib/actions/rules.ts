@@ -4,6 +4,7 @@ import type { PostgrestError } from "@supabase/supabase-js";
 import { refresh } from "next/cache";
 import { z } from "zod";
 
+import { SIGNED_OUT, invalid, type ActionResult as SharedActionResult } from "@/lib/actions/result";
 import { getMembershipRole } from "@/lib/auth/dal";
 import { requireSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getSupabaseContext, type AppSupabaseContext } from "@/lib/supabase/context";
@@ -16,9 +17,7 @@ import type { Json } from "@/lib/supabase/types";
  * Every write records the actor (author_id on versions, actor_id on events).
  */
 
-export type ActionResult<T = null> =
-  | { ok: true; data: T }
-  | { ok: false; error: string; code?: string };
+export type ActionResult<T = null> = SharedActionResult<T>;
 
 type Input = FormData | Record<string, unknown>;
 
@@ -112,11 +111,6 @@ function toObject(input: Input): Record<string, unknown> {
   return input ?? {};
 }
 
-function invalid(error: z.ZodError): { ok: false; error: string; code: string } {
-  return { ok: false, error: error.issues[0]?.message ?? "Check the form and try again.", code: "invalid_input" };
-}
-
-const SIGNED_OUT = { ok: false as const, error: "Your session has expired. Sign in again.", code: "unauthenticated" };
 const NOT_FOUND = { ok: false as const, error: "Rule not found.", code: "PT404" };
 
 /** The database says "profile"; people see "workspace". */

@@ -201,11 +201,11 @@ export function AdPage({ detail, userId }: { detail: AdDetail; userId: string })
             <h2 className="text-sm font-medium">What changed since V{detail.previous.versionNo}</h2>
             <ChangeSummaryLine summary={changes} />
           </div>
-          {changes.fixed.length > 0 && (
+          {changes.fixed.length + changes.notReflagged.length > 0 && (
             <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
-              {changes.fixed.map((f) => (
+              {[...changes.fixed.map((f) => ({ f, label: "Fixed" })), ...changes.notReflagged.map((f) => ({ f, label: "Not re-flagged" }))].map(({ f, label }) => (
                 <li key={f.id} className="flex items-start gap-2">
-                  <span className="mt-0.5 shrink-0 rounded-full border px-1.5 text-[11px] font-medium text-foreground">Fixed</span>
+                  <span className="mt-0.5 shrink-0 rounded-full border px-1.5 text-[11px] font-medium text-foreground">{label}</span>
                   <span className="min-w-0">
                     {issueTitle(f)}
                     {f.quote ? (

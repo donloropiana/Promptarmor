@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { z } from "zod";
 
+import { SIGNED_OUT, invalid, type ActionResult as SharedActionResult } from "@/lib/actions/result";
 import { startAnalysisForVersion, askAboutAd as askAboutAdEngine } from "@/lib/ai/engine";
 import { locateQuote, spanHash } from "@/lib/ai/spans";
 import { getActiveProfileId, getCurrentUser, getMembershipRole } from "@/lib/auth/dal";
@@ -34,9 +35,8 @@ import type { AdFile, Product } from "@/lib/types/ads";
  * record_decision(): the database, not this code, decides what is approvable.
  */
 
-export type ActionResult<T = null> = { ok: true; data: T } | { ok: false; error: string; code?: string };
+export type ActionResult<T = null> = SharedActionResult<T>;
 
-const SIGNED_OUT: ActionResult<never> = { ok: false, error: "Your session has expired. Sign in again.", code: "unauthenticated" };
 const NO_WORKSPACE: ActionResult<never> = { ok: false, error: "Pick a workspace first.", code: "no_workspace" };
 const NOT_FOUND: ActionResult<never> = { ok: false, error: "That ad is not in this workspace.", code: "PT404" };
 
@@ -51,10 +51,6 @@ const ACCEPTED_EXT = /\.(pdf|png|jpe?g|webp|html?|txt)$/i;
 
 const uuid = z.guid({ error: "Invalid id." });
 const productSchema = z.enum(["personal_loan", "credit_card", "mortgage", "other", "unknown"]);
-
-function invalid(error: z.ZodError): ActionResult<never> {
-  return { ok: false, error: error.issues[0]?.message ?? "Invalid input.", code: "invalid_input" };
-}
 
 function fail(err: unknown, fallback: string): ActionResult<never> {
   const message = err instanceof Error ? err.message : String(err);

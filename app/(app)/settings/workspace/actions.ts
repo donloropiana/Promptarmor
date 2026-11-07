@@ -3,6 +3,7 @@
 import { refresh } from "next/cache";
 import { z } from "zod";
 
+import { SIGNED_OUT, type ActionResult as SharedActionResult } from "@/lib/actions/result";
 import { getMembershipRole } from "@/lib/auth/dal";
 import { getAuditExport, type AuditExport } from "@/lib/data/workspace";
 import { requireSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -11,7 +12,7 @@ import type { Json } from "@/lib/supabase/types";
 
 /** Workspace settings actions: rename, clear samples, export the audit record. */
 
-export type ActionResult<T = null> = { ok: true; data: T } | { ok: false; error: string; code?: string };
+export type ActionResult<T = null> = SharedActionResult<T>;
 
 const id = z.guid({ error: "Invalid id." });
 const renameSchema = z.object({
@@ -24,7 +25,6 @@ const renameSchema = z.object({
 });
 const profileSchema = z.object({ profileId: id });
 
-const SIGNED_OUT = { ok: false as const, error: "Your session has expired. Sign in again.", code: "unauthenticated" };
 
 function toObject(input: FormData | Record<string, unknown>): Record<string, unknown> {
   if (input instanceof FormData) {

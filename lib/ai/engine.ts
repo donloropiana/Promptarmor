@@ -273,7 +273,8 @@ export async function runAnalysis(runId: string): Promise<void> {
     fallback = { findings: deterministic.findings, version, text, sections, rules, offers, transcribed: false };
 
     // Identical text (or identical image bytes) keyed with the exact rules, terms and prompt.
-    const textHash = version.normalized_text_hash ?? (needsTranscription ? version.content_sha256 : normalizedTextHash(text));
+    // A file that needs transcription is keyed by its bytes: two different scans can share a short text layer ("Page 1").
+    const textHash = needsTranscription ? version.content_sha256 : (version.normalized_text_hash ?? normalizedTextHash(text));
     const reuseKey = textHash ? computeReuseKey(textHash, rules, offers, hash) : null;
 
     const ctx: RunContext = {
